@@ -20,13 +20,14 @@ class ReplayBuffer:
     A simple FIFO experience replay buffer for SAC agents.
     """
 
-    def __init__(self, obs_dim, act_dim, size):
+    def __init__(self, obs_dim, act_dim, size, device):
         self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
         self.obs2_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
         self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
         self.rew_buf = np.zeros(size, dtype=np.float32)
         self.done_buf = np.zeros(size, dtype=np.float32)
         self.ptr, self.size, self.max_size = 0, 0, size
+        self.device = device
 
     def store(self, obs, act, rew, next_obs, done):
         self.obs_buf[self.ptr] = obs
@@ -46,7 +47,10 @@ class ReplayBuffer:
             rew=self.rew_buf[idxs],
             done=self.done_buf[idxs],
         )
-        return {k: torch.as_tensor(v, dtype=torch.float32) for k, v in batch.items()}
+        return {
+            k: torch.as_tensor(v, dtype=torch.float32, device=self.device)
+            for k, v in batch.items()
+        }
 
 
 def sac(
@@ -68,47 +72,38 @@ def sac(
     num_test_episodes=10,
     logger_kwargs=dict(),
     save_freq=1,
+    device="auto",
 ):
     """
     Soft Actor-Critic (SAC)
 
+    SAC is an off-policy actor-critic deep RL algorithm that optimizes a stochastic
+    policy in an entropy-regularized reinforcement learning framework. The actor aims
+    to maximize expected return while also maximizing entropy --- that is,
+    succeed at the task while acting as randomly as possible.
 
     Args:
         env_fn : A function which creates a copy of the environment.
-            The environment must satisfy the OpenAI Gym API.
-
         actor_critic: The constructor method for a PyTorch Module with an ``act``
             method, a ``pi`` module, a ``q1`` module, and a ``q2`` module.
             The ``act`` method and ``pi`` module should accept batches of
             observations as inputs, and ``q1`` and ``q2`` should accept a batch
             of observations and a batch of actions as inputs. When called,
-            ``act``, ``q1``, and ``q2`` should return:
+            these should return:
 
             ===========  ================  ======================================
             Call         Output Shape      Description
             ===========  ================  ======================================
-            ``act``      (batch, act_dim)  | Numpy array of actions for each
-                                           | observation.
-            ``q1``       (batch,)          | Tensor containing one current estimate
-                                           | of Q* for the provided observations
-                                           | and actions. (Critical: make sure to
-                                           | flatten this!)
-            ``q2``       (batch,)          | Tensor containing the other current
-                                           | estimate of Q* for the provided observations
-                                           | and actions. (Critical: make sure to
-                                           | flatten this!)
-            ===========  ================  ======================================
-
-            Calling ``pi`` should return:
-
-            ===========  ================  ======================================
-            Symbol       Shape             Description
-            ===========  ================  ======================================
-            ``a``        (batch, act_dim)  | Tensor containing actions from policy
-                                           | given observations.
-            ``logp_pi``  (batch,)          | Tensor containing log probabilities of
-                                           | actions in ``a``. Importantly: gradients
-                                           | should be able to flow back into ``a``.
+            ``act``     (batch, act_dim)  | Numpy array of actions for each
+                                          | observation.
+            ``pi``      N/A               | Torch Distribution object, containing
+                                          | actions and log probs.
+            ``q1``      (batch,)          | Tensor containing one current estimate
+                                          | of Q* for the provided observations
+                                          | and actions.
+            ``q2``      (batch,)          | Tensor containing the other current
+                                          | estimate of Q* for the provided
+                                          | observations and actions.
             ===========  ================  ======================================
 
         ac_kwargs (dict): Any kwargs appropriate for the ActorCritic object
@@ -162,6 +157,7 @@ def sac(
         save_freq (int): How often (in terms of gap between epochs) to save
             the current policy and value function.
 
+        device (str): Device to run the model on.
     """
 
     logger = EpochLogger(**logger_kwargs)
@@ -178,8 +174,12 @@ def sac(
     # act_limit = env.action_space.high[0]
 
     # Create actor-critic module and target networks
-    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs)
-    ac_targ = deepcopy(ac)
+    if device == "auto":
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    _device = torch.device(device)
+    ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs).to(_device)
+    ac_targ = deepcopy(ac).to(_device)
 
     # Freeze target networks with respect to optimizers (only update via polyak averaging)
     for p in ac_targ.parameters():
@@ -189,7 +189,9 @@ def sac(
     q_params = itertools.chain(ac.q1.parameters(), ac.q2.parameters())
 
     # Experience buffer
-    replay_buffer = ReplayBuffer(obs_dim=obs_dim, act_dim=act_dim, size=replay_size)
+    replay_buffer = ReplayBuffer(
+        obs_dim=obs_dim, act_dim=act_dim, size=replay_size, device=_device
+    )
 
     # Count variables (protip: try to get a feel for how different size networks behave!)
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q1, ac.q2])
@@ -292,7 +294,8 @@ def sac(
                 p_targ.data.add_((1 - polyak) * p.data)
 
     def get_action(obs, deterministic=False):
-        return ac.act(torch.as_tensor(obs, dtype=torch.float32), deterministic)
+        obs = torch.as_tensor(obs, dtype=torch.float32, device=_device)
+        return ac.act(obs, deterministic)
 
     def test_agent():
         for _ in range(num_test_episodes):
@@ -321,7 +324,7 @@ def sac(
         # Until start_steps have elapsed, randomly sample actions
         # from a uniform distribution for better exploration. Afterwards,
         # use the learned policy.
-        if t > start_steps:
+        if t >= start_steps:
             action = get_action(obs)
         else:
             action = env.action_space.sample()
@@ -392,8 +395,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
-
-    torch.set_num_threads(torch.get_num_threads())
 
     sac(
         lambda: gym.make(args.env),
