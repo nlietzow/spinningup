@@ -101,11 +101,9 @@ class Logger:
         # Initialize wandb if config is provided
         self.wandb = None
         if use_wandb:
+            wandb.login()
             try:
-                # Only initialize if there's no active run
-                if not wandb.run:
-                    wandb.init(project="spinup", name=self.exp_name)
-                self.wandb = wandb
+                self.wandb = wandb.init(project="spinup", name=self.exp_name)
             except Exception as e:
                 warnings.warn(f"Failed to initialize wandb: {e}")
                 self.wandb = None
