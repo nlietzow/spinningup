@@ -397,7 +397,7 @@ if __name__ == "__main__":
     parser.add_argument("--exp_name", type=str, default="sac")
     args = parser.parse_args()
 
-    logger_kwargs = setup_logger_kwargs(args.exp_name, args.seed)
+    logger_kwargs = setup_logger_kwargs(exp_name=args.exp_name, seed=args.seed)
 
     sac(
         lambda: gym.make(args.env),
