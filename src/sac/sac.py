@@ -12,7 +12,8 @@ from torch.optim import Adam
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
 import src.sac.core as core
-from src.utils.logx import EpochLogger, setup_logger_kwargs
+from src.config import setup_logger_kwargs
+from src.utils.logx import EpochLogger
 
 
 class ReplayBuffer:
