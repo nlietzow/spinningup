@@ -366,6 +366,7 @@ def sac(
             test_agent()
 
             # Log info about epoch
+            logger.set_step(t)
             logger.log_tabular("Epoch", epoch)
             logger.log_tabular("EpRet", with_min_and_max=True)
             logger.log_tabular("TestEpRet", with_min_and_max=True)

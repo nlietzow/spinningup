@@ -8,8 +8,8 @@ import warnings
 import joblib
 import numpy as np
 import torch
+import wandb
 
-from src.config import DEFAULT_DATA_DIR, FORCE_DATESTAMP
 from src.utils.serialization_utils import convert_json
 
 color2num = dict(
@@ -61,44 +61,6 @@ def statistics_scalar(x, with_min_and_max=False):
         max_val = np.max(x) if len(x) > 0 else -np.inf
         return mean, std, min_val, max_val
     return mean, std
-
-
-def setup_logger_kwargs(exp_name, seed=None, data_dir=None, datestamp=False):
-    """
-    Sets up an output directory for logging and returns logger keyword arguments.
-
-    Args:
-        exp_name (string): Name for experiment.
-        seed (int): Seed for random number generators used by experiment.
-        data_dir (string): Path to folder where results should be saved.
-            Default is None, which means use the DEFAULT_DATA_DIR.
-        datestamp (bool): Whether to include a date and timestamp in the
-            name of the save directory.
-
-    Returns:
-        logger_kwargs (dict): Dictionary containing output directory and
-            experiment name, to be passed to the logger class constructors.
-    """
-
-    # Datestamp forcing
-    datestamp = datestamp or FORCE_DATESTAMP
-
-    # Make base path
-    ymd_time = time.strftime("%Y-%m-%d_") if datestamp else ""
-    relpath = "".join([ymd_time, exp_name])
-
-    if seed is not None:
-        # Make a seed-specific subfolder in the experiment directory.
-        if datestamp:
-            hms_time = time.strftime("%Y-%m-%d_%H-%M-%S")
-            subfolder = "".join([hms_time, "-", exp_name, "_s", str(seed)])
-        else:
-            subfolder = "".join([exp_name, "_s", str(seed)])
-        relpath = osp.join(relpath, subfolder)
-
-    data_dir = data_dir or DEFAULT_DATA_DIR
-    logger_kwargs = dict(output_dir=osp.join(data_dir, relpath), exp_name=exp_name)
-    return logger_kwargs
 
 
 class Logger:
@@ -191,6 +153,11 @@ class Logger:
         config_json = convert_json(config)
         if self.exp_name is not None:
             config_json["exp_name"] = self.exp_name
+        
+        # Log config to wandb if enabled
+        if self.wandb:
+            self.wandb.config.update(config_json)
+        
         output = json.dumps(
             config_json, separators=(",", ":\t"), indent=4, sort_keys=True
         )
@@ -316,6 +283,29 @@ class EpochLogger(Logger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch_dict = dict()
+        self.step = None
+
+        # Initialize wandb if config is provided
+        self.wandb = None
+        if kwargs.get("use_wandb", False):
+            try:
+                project_name = kwargs.get("wandb_project", "spinup")
+                entity = kwargs.get("wandb_entity", None)
+                # Only initialize if there's no active run
+                if not wandb.run:
+                    wandb.init(
+                        project=project_name,
+                        entity=entity,
+                        name=self.exp_name,
+                        config=kwargs.get("wandb_config", None)
+                    )
+                self.wandb = wandb
+            except Exception as e:
+                warnings.warn(f"Failed to initialize wandb: {e}")
+                self.wandb = None
+
+    def set_step(self, step):
+        self.step = step
 
     def store(self, **kwargs):
         """
@@ -350,6 +340,8 @@ class EpochLogger(Logger):
         """
         if val is not None:
             super().log_tabular(key, val)
+            if self.wandb:
+                self.wandb.log({key: val}, step=self.step)
         else:
             v = self.epoch_dict[key]
             vals = (
@@ -358,10 +350,23 @@ class EpochLogger(Logger):
                 else v
             )
             stats = statistics_scalar(vals, with_min_and_max=with_min_and_max)
+
+            # Log to text file via parent class
             super().log_tabular(key if average_only else "Average" + key, stats[0])
             if not (average_only):
                 super().log_tabular("Std" + key, stats[1])
             if with_min_and_max:
                 super().log_tabular("Max" + key, stats[3])
                 super().log_tabular("Min" + key, stats[2])
+
+            # Log to wandb
+            if self.wandb:
+                wandb_dict = {f"{key}/mean" if not average_only else key: stats[0]}
+                if not average_only:
+                    wandb_dict[f"{key}/std"] = stats[1]
+                if with_min_and_max:
+                    wandb_dict[f"{key}/max"] = stats[3]
+                    wandb_dict[f"{key}/min"] = stats[2]
+                self.wandb.log(wandb_dict, step=self.step)
+
         self.epoch_dict[key] = []
