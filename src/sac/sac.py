@@ -178,6 +178,7 @@ def sac(
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     _device = torch.device(device)
+    logger.log("Device: %s" % device)
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs).to(_device)
     ac_targ = deepcopy(ac).to(_device)
 
