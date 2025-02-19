@@ -71,7 +71,13 @@ class Logger:
     state of a training run, and the trained model.
     """
 
-    def __init__(self, output_dir=None, output_fname="progress.txt", exp_name=None):
+    def __init__(
+        self,
+        use_wandb=None,
+        output_dir=None,
+        output_fname="progress.txt",
+        exp_name=None,
+    ):
         """
         Initialize a Logger.
 
@@ -90,6 +96,20 @@ class Logger:
                 hyperparameter configuration with multiple random seeds, you
                 should give them all the same ``exp_name``.)
         """
+        self.exp_name = exp_name
+
+        # Initialize wandb if config is provided
+        self.wandb = None
+        if use_wandb:
+            try:
+                # Only initialize if there's no active run
+                if not wandb.run:
+                    wandb.init(project="spinup", name=self.exp_name)
+                self.wandb = wandb
+            except Exception as e:
+                warnings.warn(f"Failed to initialize wandb: {e}")
+                self.wandb = None
+
         self.output_dir = output_dir or "/tmp/experiments/%i" % int(time.time())
         if osp.exists(self.output_dir):
             print(
@@ -106,7 +126,10 @@ class Logger:
         self.first_row = True
         self.log_headers = []
         self.log_current_row = {}
-        self.exp_name = exp_name
+        self.step = None
+
+    def set_step(self, step):
+        self.step = step
 
     def log(self, msg, color="green"):
         """Print a colorized message to stdout."""
@@ -153,11 +176,11 @@ class Logger:
         config_json = convert_json(config)
         if self.exp_name is not None:
             config_json["exp_name"] = self.exp_name
-        
+
         # Log config to wandb if enabled
         if self.wandb:
             self.wandb.config.update(config_json)
-        
+
         output = json.dumps(
             config_json, separators=(",", ":\t"), indent=4, sort_keys=True
         )
@@ -283,29 +306,6 @@ class EpochLogger(Logger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch_dict = dict()
-        self.step = None
-
-        # Initialize wandb if config is provided
-        self.wandb = None
-        if kwargs.get("use_wandb", False):
-            try:
-                project_name = kwargs.get("wandb_project", "spinup")
-                entity = kwargs.get("wandb_entity", None)
-                # Only initialize if there's no active run
-                if not wandb.run:
-                    wandb.init(
-                        project=project_name,
-                        entity=entity,
-                        name=self.exp_name,
-                        config=kwargs.get("wandb_config", None)
-                    )
-                self.wandb = wandb
-            except Exception as e:
-                warnings.warn(f"Failed to initialize wandb: {e}")
-                self.wandb = None
-
-    def set_step(self, step):
-        self.step = step
 
     def store(self, **kwargs):
         """
