@@ -125,7 +125,6 @@ class Logger:
         self.log(
             "Logging data to %s" % self.output_file.name,
             color="green",
-            bold=True,
         )
 
         self.first_row = True
@@ -187,8 +186,8 @@ class Logger:
         output = json.dumps(
             config_json, separators=(",", ":\t"), indent=4, sort_keys=True
         )
-        self.log("Saving config:\n", color="cyan", bold=True)
-        self.log(output, color="cyan", bold=True)
+        self.log("Saving config:\n", color="cyan")
+        self.log(output, color="cyan")
         with open(osp.join(self.output_dir, "config.json"), "w") as out:
             out.write(output)
 

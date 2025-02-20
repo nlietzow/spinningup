@@ -100,9 +100,6 @@ def cross_q(
     """
     local_vars = locals()
 
-    if logger_kwargs is None:
-        logger_kwargs = dict()
-
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(local_vars)
 
@@ -121,9 +118,7 @@ def cross_q(
     logger.log("Device: %s" % device)
 
     # Create actor-critic module
-    if ac_kwargs is None:
-        ac_kwargs = dict()
-    ac = core.MLPActorCritic(env.observation_space, env.action_space, ac_kwargs)
+    ac = core.MLPActorCritic(env.observation_space, env.action_space, **ac_kwargs)
     ac.to(device)
 
     # List of parameters for both Q-networks
