@@ -70,7 +70,7 @@ def sac(
     polyak=0.995,
     lr=1e-3,
     alpha=0.2,
-    batch_size=100,
+    batch_size=256,
     start_steps=10000,
     update_after=1000,
     update_every=50,
