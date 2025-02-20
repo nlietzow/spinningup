@@ -32,21 +32,22 @@ class ReplayBuffer:
     def __init__(self, obs_dim, act_dim, size, device):
         # Initialize tensors directly on the specified device
         self.obs_buf = torch.zeros(
-            core.combined_shape(size, obs_dim), dtype=torch.float32
+            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
         )
         self.obs2_buf = torch.zeros(
-            core.combined_shape(size, obs_dim), dtype=torch.float32
+            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
         )
         self.act_buf = torch.zeros(
-            core.combined_shape(size, act_dim), dtype=torch.float32
+            core.combined_shape(size, act_dim), dtype=torch.float32, device=device
         )
-        self.rew_buf = torch.zeros(size, dtype=torch.float32)
-        self.done_buf = torch.zeros(size, dtype=torch.float32)
+        self.rew_buf = torch.zeros(size, dtype=torch.float32, device=device)
+        self.done_buf = torch.zeros(size, dtype=torch.float32, device=device)
+
         self.ptr, self.size, self.max_size = 0, 0, size
         self.device = device
 
     def to_tensor(self, array):
-        return torch.tensor(array, device=self.device)
+        return torch.tensor(array, dtype=torch.float32, device=self.device)
 
     def store(self, obs, act, rew, obs2, done):
         self.obs_buf[self.ptr] = self.to_tensor(obs)
@@ -58,7 +59,13 @@ class ReplayBuffer:
         self.size = min(self.size + 1, self.max_size)
 
     def sample_batch(self, batch_size) -> Batch:
-        idxs = torch.randint(0, self.size, (batch_size,), device=self.device)
+        idxs = torch.randint(
+            0,
+            self.size,
+            (batch_size,),
+            device=self.device,
+            dtype=torch.int32,
+        )
         return Batch(
             obs=self.obs_buf[idxs],
             obs2=self.obs2_buf[idxs],
@@ -72,13 +79,13 @@ def cross_q(
     env_fn,
     ac_kwargs=dict(),
     seed=0,
-    steps_per_epoch=5_000,
+    steps_per_epoch=10_000,
     epochs=100,
     replay_size=int(1e6),
     gamma=0.99,
     lr=1e-3,
     alpha=0.1,
-    batch_size=256,
+    batch_size=512,
     start_steps=1000,
     update_after=1000,
     update_every=10,
@@ -270,13 +277,13 @@ if __name__ == "__main__":
     parser.add_argument("--env", type=str, default="Hockey-v0")
     parser.add_argument("--ac_kwargs", type=dict, default=dict())
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--steps_per_epoch", type=int, default=5_000)
+    parser.add_argument("--steps_per_epoch", type=int, default=10_000)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--replay_size", type=int, default=int(1e6))
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--alpha", type=float, default=0.1)
-    parser.add_argument("--batch_size", type=int, default=256)
+    parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--start_steps", type=int, default=1000)
     parser.add_argument("--update_after", type=int, default=1000)
     parser.add_argument("--update_every", type=int, default=10)

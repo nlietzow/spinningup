@@ -4,3 +4,4 @@ numpy
 tqdm
 joblib
 wandb
+box2d-py
