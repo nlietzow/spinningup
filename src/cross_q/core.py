@@ -14,6 +14,10 @@ def combined_shape(length, shape=None):
     return (length, shape) if np.isscalar(shape) else (length, *shape)
 
 
+def count_vars(module):
+    return sum([np.prod(p.shape) for p in module.parameters()])
+
+
 def mlp(sizes, activation, output_activation=nn.Identity):
     layers = []
     for j in range(len(sizes) - 1):
@@ -111,7 +115,8 @@ class MLPActorCritic(nn.Module):
         self,
         observation_space,
         action_space,
-        hidden_sizes=(256, 256),
+        actor_hidden_sizes=(256, 256),
+        critic_hidden_sizes=(1024, 1024),
         activation=nn.ReLU,
     ):
         super().__init__()
@@ -120,30 +125,13 @@ class MLPActorCritic(nn.Module):
         act_limit = action_space.high[0]
 
         self.pi = SquashedGaussianMLPActor(
-            obs_dim, act_dim, hidden_sizes, activation, act_limit
+            obs_dim, act_dim, actor_hidden_sizes, activation, act_limit
         )
-        # Replace the standard Q networks with our BN-equipped critic networks.
-        self.q1 = MLPQFunctionBN(obs_dim, act_dim, hidden_sizes, activation)
-        self.q2 = MLPQFunctionBN(obs_dim, act_dim, hidden_sizes, activation)
+        # Use separate sizes for the BN-equipped critic networks.
+        self.q1 = MLPQFunctionBN(obs_dim, act_dim, critic_hidden_sizes, activation)
+        self.q2 = MLPQFunctionBN(obs_dim, act_dim, critic_hidden_sizes, activation)
 
     def act(self, obs, deterministic=False):
         with torch.no_grad():
             a, _ = self.pi(obs, deterministic, False)
             return a.cpu().numpy()
-
-
-# Example usage in a critic loss (conceptual):
-def critic_loss(q1_net, q2_net, policy, obs, act, rews, next_obs, gamma, alpha):
-    # Sample next actions from the current policy.
-    next_act, next_logpi = policy(next_obs)
-    # Use the joint forward pass on each Q network.
-    q1, next_q1 = q1_net.forward_joint(obs, act, next_obs, next_act)
-    q2, next_q2 = q2_net.forward_joint(obs, act, next_obs, next_act)
-    # Compute the target as the minimum over the two Q's (and apply the entropy correction).
-    next_q = torch.min(next_q1, next_q2)
-    target = rews + gamma * (next_q - alpha * next_logpi)
-    # Critic loss is the MSE error for both Q functions.
-    loss_q1 = F.mse_loss(q1, target.detach())
-    loss_q2 = F.mse_loss(q2, target.detach())
-    loss = loss_q1 + loss_q2
-    return loss

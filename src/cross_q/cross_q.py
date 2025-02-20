@@ -11,7 +11,7 @@ from torch.optim import Adam
 
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
-import src.sac.core as core
+import src.cross_q.core as core
 from src.config import setup_logger_kwargs
 from src.utils.logx import EpochLogger
 
