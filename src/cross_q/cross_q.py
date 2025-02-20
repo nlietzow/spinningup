@@ -77,7 +77,7 @@ class ReplayBuffer:
 
 def cross_q(
     env_fn,
-    ac_kwargs=dict(),
+    ac_kwargs=None,
     seed=0,
     steps_per_epoch=10_000,
     epochs=100,
@@ -90,7 +90,7 @@ def cross_q(
     update_after=1000,
     update_every=10,
     num_test_episodes=10,
-    logger_kwargs=dict(),
+    logger_kwargs=None,
     save_freq=10,
     device=None,
 ):
@@ -100,6 +100,10 @@ def cross_q(
     ensuring that the BatchNorm layers see a mixture of both distributions.
     """
     local_vars = locals()
+
+    if logger_kwargs is None:
+        logger_kwargs = dict()
+
     logger = EpochLogger(**logger_kwargs)
     logger.save_config(local_vars)
 
@@ -118,7 +122,9 @@ def cross_q(
     logger.log("Device: %s" % device)
 
     # Create actor-critic module
-    ac = core.MLPActorCritic(env.observation_space, env.action_space, **ac_kwargs)
+    if ac_kwargs is None:
+        ac_kwargs = dict()
+    ac = core.MLPActorCritic(env.observation_space, env.action_space, ac_kwargs)
     ac.to(device)
 
     # List of parameters for both Q-networks

@@ -73,10 +73,9 @@ class Logger:
 
     def __init__(
         self,
-        use_wandb=None,
-        output_dir=None,
-        output_fname="progress.txt",
-        exp_name=None,
+        output_dir,
+        output_fname,
+        exp_name,
     ):
         """
         Initialize a Logger.
@@ -98,29 +97,37 @@ class Logger:
         """
         self.exp_name = exp_name
 
-        # Initialize wandb if config is provided
-        self.wandb = None
-        if use_wandb:
-            wandb.login()
-            try:
-                self.wandb = wandb.init(project="spinup", name=self.exp_name)
-            except Exception as e:
-                warnings.warn(f"Failed to initialize wandb: {e}")
-                self.wandb = None
+        # Initialize wandb
+        wandb.login()
+        try:
+            self.wandb = wandb.init(project="spinup", name=self.exp_name)
+        except Exception as e:
+            self.log(f"Failed to initialize wandb: {e}", color="red")
+            self.wandb = None
 
-        self.output_dir = output_dir or "/tmp/experiments/%i" % int(time.time())
+        if self.wandb:
+            self.output_dir = osp.join(output_dir, self.wandb.id)
+        else:
+            self.output_dir = osp.join(output_dir, self.exp_name)
+
         if osp.exists(self.output_dir):
-            print(
+            self.log(
                 "Warning: Log dir %s already exists! Storing info there anyway."
-                % self.output_dir
+                % self.output_dir,
+                color="yellow",
             )
         else:
             os.makedirs(self.output_dir)
+
         self.output_file = open(osp.join(self.output_dir, output_fname), "w")
         atexit.register(self.output_file.close)
-        print(
-            colorize("Logging data to %s" % self.output_file.name, "green", bold=True)
+
+        self.log(
+            "Logging data to %s" % self.output_file.name,
+            color="green",
+            bold=True,
         )
+
         self.first_row = True
         self.log_headers = []
         self.log_current_row = {}

@@ -16,15 +16,12 @@ DEFAULT_SHORTHAND = True
 WAIT_BEFORE_LAUNCH = 5
 
 
-def setup_logger_kwargs(
-    exp_name, use_wandb=True, seed=None, data_dir=None, datestamp=False
-):
+def setup_logger_kwargs(exp_name, seed=None, data_dir=None, datestamp=False):
     """
     Sets up an output directory for logging and returns logger keyword arguments.
 
     Args:
         exp_name (string): Name for experiment.
-        use_wandb (bool): Whether to use wandb.
         seed (int): Seed for random number generators used by experiment.
         data_dir (string): Path to folder where results should be saved.
             Default is None, which means use the DEFAULT_DATA_DIR.
@@ -56,5 +53,4 @@ def setup_logger_kwargs(
     return dict(
         output_dir=osp.join(data_dir, relpath),
         exp_name=exp_name,
-        use_wandb=use_wandb,
     )
