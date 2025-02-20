@@ -126,10 +126,13 @@ def cross_q(
         with torch.no_grad():
             # Get next actions and corresponding log-probs
             a2, logp_a2 = ac.pi(obs2)
-            # Use the joint forward pass so that BatchNorm sees both current and next samples
-            q1_current, q1_next = ac.q1.forward_joint(obs, action, obs2, a2)
-            q2_current, q2_next = ac.q2.forward_joint(obs, action, obs2, a2)
-            # Use the minimum of the next Q estimates for the target, with entropy correction
+
+        # Use the joint forward pass so that BatchNorm sees both current and next samples
+        q1_current, q1_next = ac.q1.forward_joint(obs, action, obs2, a2)
+        q2_current, q2_next = ac.q2.forward_joint(obs, action, obs2, a2)
+
+        # Compute the target backup without gradients
+        with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = reward + gamma * (1 - done) * (q_pi - alpha * logp_a2)
 
