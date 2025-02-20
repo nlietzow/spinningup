@@ -206,10 +206,8 @@ def cross_q(
 
     def get_action(obs, deterministic=False):
         obs = torch.as_tensor(obs, dtype=torch.float32, device=device)
-        if obs.ndim == 1:
-            obs = obs.unsqueeze(0)
         action = ac.act(obs, deterministic)
-        return action[0] if obs.ndim == 1 else action
+        return action
 
     def test_agent():
         returns, lengths = np.zeros(num_test_episodes), np.zeros(num_test_episodes)
