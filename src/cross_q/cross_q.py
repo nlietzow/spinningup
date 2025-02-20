@@ -1,4 +1,3 @@
-import itertools
 import sys
 import time
 from pathlib import Path
@@ -46,7 +45,7 @@ class ReplayBuffer:
         self.device = device
 
     def to_tensor(self, array):
-        return torch.tensor(array, dtype=torch.float32, device=self.device)
+        return torch.as_tensor(array, dtype=torch.float32, device=self.device)
 
     def store(self, obs, act, rew, obs2, done):
         self.obs_buf[self.ptr] = self.to_tensor(obs)
@@ -206,8 +205,11 @@ def cross_q(
         logger.store(Alpha=log_alpha.exp().item(), LossAlpha=loss_alpha.item())
 
     def get_action(obs, deterministic=False):
-        obs = torch.tensor(obs, device=device)
-        return ac.act(obs, deterministic)
+        obs = torch.as_tensor(obs, dtype=torch.float32, device=device)
+        if obs.ndim == 1:
+            obs = obs.unsqueeze(0)
+        action = ac.act(obs, deterministic)
+        return action[0] if obs.ndim == 1 else action
 
     def test_agent():
         returns, lengths = np.zeros(num_test_episodes), np.zeros(num_test_episodes)
@@ -296,11 +298,11 @@ if __name__ == "__main__":
     parser.add_argument("--replay_size", type=int, default=int(1e6))
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--alpha", type=float, default=0.1)
+    parser.add_argument("--alpha", type=float, default=0.01)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--start_steps", type=int, default=1000)
     parser.add_argument("--update_after", type=int, default=1000)
-    parser.add_argument("--update_every", type=int, default=10)
+    parser.add_argument("--update_every", type=int, default=1)
     parser.add_argument("--num_test_episodes", type=int, default=10)
     parser.add_argument("--save_freq", type=int, default=10)
     parser.add_argument("--device", type=str, default="auto")
