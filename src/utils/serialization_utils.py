@@ -27,8 +27,8 @@ def convert_json(obj):
 
             return str(obj)
     except Exception as e:
-        print(f"Error converting object to JSON: {e}")
-        return None
+        print(type(obj))
+        raise e
 
 
 def is_json_serializable(v):
