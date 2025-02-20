@@ -81,7 +81,7 @@ def cross_q(
     replay_size,
     gamma,
     lr,
-    alpha,  # initial alpha value
+    alpha,
     batch_size,
     start_steps,
     update_after,

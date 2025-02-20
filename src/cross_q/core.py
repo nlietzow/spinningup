@@ -34,7 +34,7 @@ def mlp_bn(sizes, activation, output_activation=nn.Identity):
     layers = []
     for j in range(len(sizes) - 2):
         layers.append(nn.Linear(sizes[j], sizes[j + 1]))
-        layers.append(nn.BatchNorm1d(sizes[j + 1]))
+        layers.append(nn.BatchNorm1d(sizes[j + 1], eps=0.001, momentum=0.01))
         layers.append(activation())
     # Final layer without BatchNorm and (typically) without nonlinearity.
     layers.append(nn.Linear(sizes[-2], sizes[-1]))
