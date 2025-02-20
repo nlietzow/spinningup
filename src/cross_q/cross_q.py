@@ -76,22 +76,22 @@ class ReplayBuffer:
 
 def cross_q(
     env_fn,
-    ac_kwargs=None,
-    seed=0,
-    steps_per_epoch=10_000,
-    epochs=100,
-    replay_size=int(1e6),
-    gamma=0.99,
-    lr=1e-3,
-    alpha=0.1,
-    batch_size=256,
-    start_steps=1000,
-    update_after=1000,
-    update_every=10,
-    num_test_episodes=10,
-    logger_kwargs=None,
-    save_freq=10,
-    device=None,
+    ac_kwargs,
+    seed,
+    steps_per_epoch,
+    epochs,
+    replay_size,
+    gamma,
+    lr,
+    alpha,
+    batch_size,
+    start_steps,
+    update_after,
+    update_every,
+    num_test_episodes,
+    logger_kwargs,
+    save_freq,
+    device,
 ):
     """
     Cross Q-learning with a BN-equipped critic that uses a joint forward pass.
@@ -282,6 +282,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--env", type=str, default="Hockey-v0")
     parser.add_argument("--ac_kwargs", type=dict, default=dict())
     parser.add_argument("--seed", type=int, default=0)
