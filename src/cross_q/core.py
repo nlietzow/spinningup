@@ -15,7 +15,7 @@ def combined_shape(length, shape=None):
 
 
 def count_vars(module):
-    return sum([np.prod(p.shape) for p in module.parameters()])
+    return sum(p.numel() for p in module.parameters())
 
 
 def mlp(sizes, activation, output_activation=nn.Identity):
@@ -66,11 +66,11 @@ class SquashedGaussianMLPActor(nn.Module):
             pi_action = pi_distribution.rsample()
 
         if with_logprob:
-            logp_pi = pi_distribution.log_prob(pi_action).sum(axis=-1)
-            # Apply tanh correction (see SAC paper appendix for details)
-            logp_pi -= (2 * (np.log(2) - pi_action - F.softplus(-2 * pi_action))).sum(
-                axis=1
+            logp_pi = pi_distribution.log_prob(pi_action).sum(dim=-1)
+            log_2 = torch.log(
+                torch.tensor(2.0, device=pi_action.device, dtype=pi_action.dtype)
             )
+            logp_pi -= (2 * (log_2 - pi_action - F.softplus(-2 * pi_action))).sum(dim=1)
         else:
             logp_pi = None
 

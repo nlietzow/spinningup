@@ -63,7 +63,6 @@ class ReplayBuffer:
             self.size,
             (batch_size,),
             device=self.device,
-            dtype=torch.int32,
         )
         return Batch(
             obs=self.obs_buf[idxs],
@@ -127,7 +126,7 @@ def cross_q(
     ac.to(device)
 
     # List of parameters for both Q-networks
-    q_params = itertools.chain(ac.q1.parameters(), ac.q2.parameters())
+    q_params = tuple(ac.q1.parameters()) + tuple(ac.q2.parameters())
 
     # Experience buffer
     replay_buffer = ReplayBuffer(
