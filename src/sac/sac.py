@@ -160,9 +160,9 @@ def sac(
 
         device (str): Device to run the model on.
     """
-
+    local_vars = locals()
     logger = EpochLogger(**logger_kwargs)
-    logger.save_config(locals())
+    logger.save_config(local_vars)
 
     torch.manual_seed(seed)
     np.random.seed(seed)
