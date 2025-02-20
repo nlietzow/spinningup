@@ -104,7 +104,6 @@ class MLPQFunctionBN(nn.Module):
         cat_act = torch.cat([act, next_act], dim=0)
         cat_input = torch.cat([cat_obs, cat_act], dim=-1)
         cat_q = self.q(cat_input)
-        # Assume the original batch size is the same for obs and next_obs.
         q, next_q = torch.split(cat_q, obs.shape[0], dim=0)
         return torch.squeeze(q, -1), torch.squeeze(next_q, -1)
 
