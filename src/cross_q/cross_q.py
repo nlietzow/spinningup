@@ -292,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("--ac_kwargs", type=dict, default=dict())
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--steps_per_epoch", type=int, default=10_000)
-    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--epochs", type=int, default=500)
     parser.add_argument("--replay_size", type=int, default=int(1e6))
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
