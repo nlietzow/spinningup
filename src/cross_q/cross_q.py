@@ -12,7 +12,6 @@ from torch.optim import Adam
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
 import src.cross_q.core as core
-from src.config import setup_logger_kwargs
 from src.utils.logx import EpochLogger
 
 
@@ -299,9 +298,9 @@ if __name__ == "__main__":
     parser.add_argument("--num_test_episodes", type=int, default=10)
     parser.add_argument("--save_freq", type=int, default=10)
     parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--logger_kwargs", type=dict, default=dict())
 
     args = parser.parse_args()
-    logger_kwargs = setup_logger_kwargs(args.env, args.seed)
 
     if args.env == "Hockey-v0":
         gym.register(
@@ -324,7 +323,7 @@ if __name__ == "__main__":
         update_after=args.update_after,
         update_every=args.update_every,
         num_test_episodes=args.num_test_episodes,
-        logger_kwargs=logger_kwargs,
+        logger_kwargs=args.logger_kwargs,
         save_freq=args.save_freq,
         device=args.device,
     )

@@ -8,8 +8,9 @@ import warnings
 import joblib
 import numpy as np
 import torch
-import wandb
 
+import wandb
+from src.config import DEFAULT_DATA_DIR
 from src.utils.serialization_utils import convert_json
 
 color2num = dict(
@@ -73,9 +74,10 @@ class Logger:
 
     def __init__(
         self,
-        output_dir,
-        output_fname,
-        exp_name,
+        output_dir=DEFAULT_DATA_DIR,
+        exp_name="cross_q",
+        output_fname="progress.txt",
+        wandb_project="cross_q",
     ):
         """
         Initialize a Logger.
@@ -95,12 +97,10 @@ class Logger:
                 hyperparameter configuration with multiple random seeds, you
                 should give them all the same ``exp_name``.)
         """
-        self.exp_name = exp_name
-
         # Initialize wandb
         wandb.login()
         try:
-            self.wandb = wandb.init(project="spinup", name=self.exp_name)
+            self.wandb = wandb.init(project=wandb_project)
         except Exception as e:
             self.log(f"Failed to initialize wandb: {e}", color="red")
             self.wandb = None
@@ -108,7 +108,7 @@ class Logger:
         if self.wandb:
             self.output_dir = osp.join(output_dir, self.wandb.id)
         else:
-            self.output_dir = osp.join(output_dir, self.exp_name)
+            self.output_dir = osp.join(output_dir, exp_name)
 
         if osp.exists(self.output_dir):
             self.log(
@@ -179,8 +179,6 @@ class Logger:
             logger.save_config(locals())
         """
         config_json = convert_json(config)
-        if self.exp_name is not None:
-            config_json["exp_name"] = self.exp_name
 
         # Log config to wandb if enabled
         if self.wandb:
@@ -189,8 +187,8 @@ class Logger:
         output = json.dumps(
             config_json, separators=(",", ":\t"), indent=4, sort_keys=True
         )
-        print(colorize("Saving config:\n", color="cyan", bold=True))
-        print(output)
+        self.log("Saving config:\n", color="cyan", bold=True)
+        self.log(output, color="cyan", bold=True)
         with open(osp.join(self.output_dir, "config.json"), "w") as out:
             out.write(output)
 
