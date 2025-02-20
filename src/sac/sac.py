@@ -18,40 +18,44 @@ from src.utils.logx import EpochLogger
 
 class ReplayBuffer:
     """
-    A simple FIFO experience replay buffer for SAC agents.
+    A simple FIFO experience replay buffer for SAC agents with GPU storage.
     """
 
     def __init__(self, obs_dim, act_dim, size, device):
-        self.obs_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.obs2_buf = np.zeros(core.combined_shape(size, obs_dim), dtype=np.float32)
-        self.act_buf = np.zeros(core.combined_shape(size, act_dim), dtype=np.float32)
-        self.rew_buf = np.zeros(size, dtype=np.float32)
-        self.done_buf = np.zeros(size, dtype=np.float32)
+        # Initialize tensors directly on the specified device
+        self.obs_buf = torch.zeros(
+            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
+        )
+        self.obs2_buf = torch.zeros(
+            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
+        )
+        self.act_buf = torch.zeros(
+            core.combined_shape(size, act_dim), dtype=torch.float32, device=device
+        )
+        self.rew_buf = torch.zeros(size, dtype=torch.float32, device=device)
+        self.done_buf = torch.zeros(size, dtype=torch.float32, device=device)
         self.ptr, self.size, self.max_size = 0, 0, size
         self.device = device
 
     def store(self, obs, act, rew, next_obs, done):
-        self.obs_buf[self.ptr] = obs
-        self.obs2_buf[self.ptr] = next_obs
-        self.act_buf[self.ptr] = act
-        self.rew_buf[self.ptr] = rew
-        self.done_buf[self.ptr] = done
+        # Convert numpy arrays to tensors and move to device
+        self.obs_buf[self.ptr] = torch.as_tensor(obs, device=self.device)
+        self.obs2_buf[self.ptr] = torch.as_tensor(next_obs, device=self.device)
+        self.act_buf[self.ptr] = torch.as_tensor(act, device=self.device)
+        self.rew_buf[self.ptr] = torch.as_tensor(rew, device=self.device)
+        self.done_buf[self.ptr] = torch.as_tensor(done, device=self.device)
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
     def sample_batch(self, batch_size=32):
-        idxs = np.random.randint(0, self.size, size=batch_size)
-        batch = dict(
+        idxs = torch.randint(0, self.size, (batch_size,), device=self.device)
+        return dict(
             obs=self.obs_buf[idxs],
             obs2=self.obs2_buf[idxs],
             act=self.act_buf[idxs],
             rew=self.rew_buf[idxs],
             done=self.done_buf[idxs],
         )
-        return {
-            k: torch.as_tensor(v, dtype=torch.float32, device=self.device)
-            for k, v in batch.items()
-        }
 
 
 def sac(
@@ -170,9 +174,6 @@ def sac(
     env, test_env = env_fn(), env_fn()
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
-
-    # Action limit for clamping: critically, assumes all dimensions share the same bound!
-    # act_limit = env.action_space.high[0]
 
     # Create actor-critic module and target networks
     if device == "auto":
