@@ -152,12 +152,7 @@ def cross_q(
         loss_q2 = ((q2_current - backup) ** 2).mean()
         loss_q = loss_q1 + loss_q2
 
-        q_info = dict(
-            Q1Vals=q1_current.detach().cpu().numpy(),
-            Q2Vals=q2_current.detach().cpu().numpy(),
-        )
-
-        return loss_q, q_info
+        return loss_q
 
     # Set up function for computing CrossQ pi loss
     def compute_loss_pi(batch: Batch):
@@ -168,8 +163,7 @@ def cross_q(
 
         loss_pi = (alpha * logp_pi - q_pi).mean()
 
-        pi_info = dict(LogPi=logp_pi.detach().cpu().numpy())
-        return loss_pi, pi_info
+        return loss_pi
 
     # Set up optimizers for policy and q-function
     pi_optimizer = Adam(ac.pi.parameters(), lr=lr, betas=(0.5, 0.999))
@@ -178,24 +172,24 @@ def cross_q(
     def update(batch: Batch):
         # First update the Q-networks using the joint forward pass
         q_optimizer.zero_grad()
-        loss_q, q_info = compute_loss_q(batch)
+        loss_q = compute_loss_q(batch)
         loss_q.backward()
         q_optimizer.step()
-        logger.store(LossQ=loss_q.item(), **q_info)
+        logger.store(LossQ=loss_q.item())
 
         # Freeze Q-networks while updating the policy
         for p in q_params:
             p.requires_grad = False
 
         pi_optimizer.zero_grad()
-        loss_pi, pi_info = compute_loss_pi(batch)
+        loss_pi = compute_loss_pi(batch)
         loss_pi.backward()
         pi_optimizer.step()
 
         for p in q_params:
             p.requires_grad = True
 
-        logger.store(LossPi=loss_pi.item(), **pi_info)
+        logger.store(LossPi=loss_pi.item())
 
     def get_action(obs, deterministic=False):
         obs = torch.tensor(obs, device=device)
