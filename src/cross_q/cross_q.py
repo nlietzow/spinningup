@@ -58,7 +58,7 @@ class ReplayBuffer:
         )
 
 
-def sac(
+def cross_q(
     env_fn,
     actor_critic=core.MLPActorCritic,
     ac_kwargs=dict(),
@@ -158,8 +158,8 @@ def sac(
         return loss_pi, pi_info
 
     # Set up optimizers for policy and q-function
-    pi_optimizer = Adam(ac.pi.parameters(), lr=lr)
-    q_optimizer = Adam(q_params, lr=lr)
+    pi_optimizer = Adam(ac.pi.parameters(), lr=lr, betas=(0.5, 0.999))
+    q_optimizer = Adam(q_params, lr=lr, betas=(0.5, 0.999))
 
     # Set up model saving
     logger.setup_pytorch_saver(ac)
