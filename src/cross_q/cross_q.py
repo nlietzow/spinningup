@@ -210,21 +210,30 @@ def cross_q(
         return action
 
     def test_agent():
-        returns, lengths = np.zeros(num_test_episodes), np.zeros(num_test_episodes)
+        returns, lengths, success = (
+            np.zeros(num_test_episodes),
+            np.zeros(num_test_episodes),
+            np.zeros(num_test_episodes),
+        )
         for ep in range(num_test_episodes):
-            obs, _ = test_env.reset()
+            obs, info = test_env.reset()
             ep_ret, ep_len = 0, 0
             terminated, truncated = False, False
             while not (terminated or truncated):
                 action = get_action(obs, True)
-                obs, reward, terminated, truncated, _ = test_env.step(action)
+                obs, reward, terminated, truncated, info = test_env.step(action)
                 ep_ret += reward
                 ep_len += 1
 
             returns[ep] = ep_ret
             lengths[ep] = ep_len
+            success[ep] = info.get("is_success", False)
 
-        logger.store(TestEpRet=returns.mean(), TestEpLen=lengths.mean())
+        logger.store(
+            TestEpRet=returns.mean(),
+            TestEpLen=lengths.mean(),
+            TestSuccess=success.mean(),
+        )
 
     # Main interaction loop
     total_steps = steps_per_epoch * epochs
@@ -242,7 +251,7 @@ def cross_q(
         else:
             action = env.action_space.sample()
 
-        obs2, reward, terminated, truncated, _ = env.step(action)
+        obs2, reward, terminated, truncated, info = env.step(action)
         ep_ret += reward
         ep_len += 1
 
@@ -252,8 +261,12 @@ def cross_q(
         obs = obs2
 
         if terminated or truncated:
-            logger.store(EpRet=ep_ret, EpLen=ep_len)
-            obs, _ = env.reset()
+            logger.store(
+                EpRet=ep_ret,
+                EpLen=ep_len,
+                EpSuccess=int(info.get("is_success", False)),
+            )
+            obs, info = env.reset()
             ep_ret, ep_len = 0, 0
 
         if t >= update_after and t % update_every == 0:
