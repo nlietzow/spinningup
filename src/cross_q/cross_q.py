@@ -196,7 +196,8 @@ def cross_q(
         return ac.act(obs, deterministic)
 
     def test_agent():
-        for _ in range(num_test_episodes):
+        returns, lengths = np.zeros(num_test_episodes), np.zeros(num_test_episodes)
+        for ep in range(num_test_episodes):
             obs, _ = test_env.reset()
             ep_ret, ep_len = 0, 0
             terminated, truncated = False, False
@@ -205,7 +206,11 @@ def cross_q(
                 obs, reward, terminated, truncated, _ = test_env.step(action)
                 ep_ret += reward
                 ep_len += 1
-            logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
+
+            returns[ep] = ep_ret
+            lengths[ep] = ep_len
+
+        logger.store(TestEpRet=returns.mean(), TestEpLen=lengths.mean())
 
     # Main interaction loop
     total_steps = steps_per_epoch * epochs
@@ -256,7 +261,6 @@ def cross_q(
             logger.log_tabular("EpLen", average_only=True)
             logger.log_tabular("TestEpLen", average_only=True)
             logger.log_tabular("TotalEnvInteracts", t)
-            logger.log_tabular("LogPi", with_min_and_max=True)
             logger.log_tabular("LossPi", average_only=True)
             logger.log_tabular("LossQ", average_only=True)
             logger.log_tabular("FPS", t / (time.time() - start_time))
