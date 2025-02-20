@@ -85,7 +85,7 @@ def cross_q(
     gamma=0.99,
     lr=1e-3,
     alpha=0.1,
-    batch_size=512,
+    batch_size=256,
     start_steps=1000,
     update_after=1000,
     update_every=10,
@@ -292,7 +292,7 @@ if __name__ == "__main__":
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--alpha", type=float, default=0.1)
-    parser.add_argument("--batch_size", type=int, default=512)
+    parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--start_steps", type=int, default=1000)
     parser.add_argument("--update_after", type=int, default=1000)
     parser.add_argument("--update_every", type=int, default=10)
