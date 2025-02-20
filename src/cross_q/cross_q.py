@@ -83,7 +83,7 @@ def cross_q(
     replay_size,
     gamma,
     lr,
-    alpha,
+    alpha,  # initial alpha value
     batch_size,
     start_steps,
     update_after,
@@ -117,6 +117,11 @@ def cross_q(
 
     logger.log("Device: %s" % device)
 
+    # Setup adaptive alpha parameter
+    target_entropy = -float(act_dim)  # commonly set to -|A|
+    log_alpha = torch.tensor(np.log(alpha), requires_grad=True, device=device)
+    alpha_optimizer = Adam([log_alpha], lr=lr, betas=(0.5, 0.999))
+
     # Create actor-critic module
     ac = core.MLPActorCritic(env.observation_space, env.action_space, **ac_kwargs)
     ac.to(device)
@@ -143,10 +148,12 @@ def cross_q(
         q1_current, q1_next = ac.q1.forward_joint(batch.obs, batch.act, batch.obs2, a2)
         q2_current, q2_next = ac.q2.forward_joint(batch.obs, batch.act, batch.obs2, a2)
 
-        # Compute the target backup without gradients
+        # Compute the target backup without gradients using adaptive alpha
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
-            backup = batch.reward + gamma * (1 - batch.done) * (q_pi - alpha * logp_a2)
+            backup = batch.reward + gamma * (1 - batch.done) * (
+                q_pi - log_alpha.exp() * logp_a2
+            )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()
         loss_q2 = ((q2_current - backup) ** 2).mean()
@@ -154,16 +161,17 @@ def cross_q(
 
         return loss_q
 
-    # Set up function for computing CrossQ pi loss
+    # Set up function for computing CrossQ pi loss using adaptive alpha.
+    # Returns both the loss and the log-probabilities for alpha update.
     def compute_loss_pi(batch: Batch):
         pi, logp_pi = ac.pi(batch.obs)
         q1_pi = ac.q1(batch.obs, pi)
         q2_pi = ac.q2(batch.obs, pi)
         q_pi = torch.min(q1_pi, q2_pi)
 
-        loss_pi = (alpha * logp_pi - q_pi).mean()
+        loss_pi = (log_alpha.exp() * logp_pi - q_pi).mean()
 
-        return loss_pi
+        return loss_pi, logp_pi
 
     # Set up optimizers for policy and q-function
     pi_optimizer = Adam(ac.pi.parameters(), lr=lr, betas=(0.5, 0.999))
@@ -182,7 +190,7 @@ def cross_q(
             p.requires_grad = False
 
         pi_optimizer.zero_grad()
-        loss_pi = compute_loss_pi(batch)
+        loss_pi, logp_pi = compute_loss_pi(batch)
         loss_pi.backward()
         pi_optimizer.step()
 
@@ -190,6 +198,13 @@ def cross_q(
             p.requires_grad = True
 
         logger.store(LossPi=loss_pi.item())
+
+        # Adaptive alpha update
+        alpha_optimizer.zero_grad()
+        loss_alpha = -(log_alpha * (logp_pi.detach() + target_entropy)).mean()
+        loss_alpha.backward()
+        alpha_optimizer.step()
+        logger.store(Alpha=log_alpha.exp().item(), LossAlpha=loss_alpha.item())
 
     def get_action(obs, deterministic=False):
         obs = torch.tensor(obs, device=device)
