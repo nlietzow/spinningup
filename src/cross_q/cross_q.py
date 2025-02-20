@@ -228,6 +228,8 @@ def cross_q(
     logger.setup_pytorch_saver(ac)
 
     for t in range(total_steps):
+        logger.set_step(t)
+
         if t >= start_steps:
             action = get_action(obs)
         else:
@@ -259,7 +261,7 @@ def cross_q(
                 logger.save_state({"env": env}, None)
 
             test_agent()
-            logger.set_step(t)
+
             logger.log_tabular("Epoch", epoch)
             logger.log_tabular("EpRet", with_min_and_max=True)
             logger.log_tabular("TestEpRet", with_min_and_max=True)
@@ -273,6 +275,7 @@ def cross_q(
             logger.log_tabular("LossQ", average_only=True)
             logger.log_tabular("FPS", t / (time.time() - start_time))
             logger.log_tabular("Time", time.time() - start_time)
+
             logger.dump_tabular()
 
 

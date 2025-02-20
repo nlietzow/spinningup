@@ -319,6 +319,9 @@ class EpochLogger(Logger):
         Provide an arbitrary number of keyword arguments with numerical
         values.
         """
+        if self.wandb:
+            self.wandb.log(kwargs, step=self.step)
+
         for k, v in kwargs.items():
             if not (k in self.epoch_dict.keys()):
                 self.epoch_dict[k] = []
@@ -345,8 +348,6 @@ class EpochLogger(Logger):
         """
         if val is not None:
             super().log_tabular(key, val)
-            if self.wandb:
-                self.wandb.log({key: val}, step=self.step)
         else:
             v = self.epoch_dict[key]
             vals = (
@@ -363,15 +364,5 @@ class EpochLogger(Logger):
             if with_min_and_max:
                 super().log_tabular("Max" + key, stats[3])
                 super().log_tabular("Min" + key, stats[2])
-
-            # Log to wandb
-            if self.wandb:
-                wandb_dict = {f"{key}/mean" if not average_only else key: stats[0]}
-                if not average_only:
-                    wandb_dict[f"{key}/std"] = stats[1]
-                if with_min_and_max:
-                    wandb_dict[f"{key}/max"] = stats[3]
-                    wandb_dict[f"{key}/min"] = stats[2]
-                self.wandb.log(wandb_dict, step=self.step)
 
         self.epoch_dict[key] = []
