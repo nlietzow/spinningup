@@ -296,7 +296,7 @@ if __name__ == "__main__":
     parser.add_argument("--replay_size", type=int, default=int(1e6))
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--alpha", type=float, default=0.01)
+    parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--start_steps", type=int, default=1000)
     parser.add_argument("--update_after", type=int, default=1000)
