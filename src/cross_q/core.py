@@ -22,8 +22,20 @@ def mlp(sizes, activation, output_activation=nn.Identity):
     return nn.Sequential(*layers)
 
 
-def count_vars(module):
-    return sum([np.prod(p.shape) for p in module.parameters()])
+def mlp_bn(sizes, activation, output_activation=nn.Identity):
+    """
+    Builds an MLP where every hidden layer (except the last) has a BatchNorm layer.
+    Note: For a batch of shape (batch_size, features), nn.BatchNorm1d is used.
+    """
+    layers = []
+    for j in range(len(sizes) - 2):
+        layers.append(nn.Linear(sizes[j], sizes[j + 1]))
+        layers.append(nn.BatchNorm1d(sizes[j + 1]))
+        layers.append(activation())
+    # Final layer without BatchNorm and (typically) without nonlinearity.
+    layers.append(nn.Linear(sizes[-2], sizes[-1]))
+    layers.append(output_activation())
+    return nn.Sequential(*layers)
 
 
 class SquashedGaussianMLPActor(nn.Module):
@@ -50,12 +62,8 @@ class SquashedGaussianMLPActor(nn.Module):
             pi_action = pi_distribution.rsample()
 
         if with_logprob:
-            # Compute logprob from Gaussian, and then apply correction for Tanh squashing.
-            # NOTE: The correction formula is a little bit magic. To get an understanding
-            # of where it comes from, check out the original SAC paper (arXiv 1801.01290)
-            # and look in appendix C. This is a more numerically-stable equivalent to Eq 21.
-            # Try deriving it yourself as a (very difficult) exercise. :)
             logp_pi = pi_distribution.log_prob(pi_action).sum(axis=-1)
+            # Apply tanh correction (see SAC paper appendix for details)
             logp_pi -= (2 * (np.log(2) - pi_action - F.softplus(-2 * pi_action))).sum(
                 axis=1
             )
@@ -64,20 +72,40 @@ class SquashedGaussianMLPActor(nn.Module):
 
         pi_action = torch.tanh(pi_action)
         pi_action = self.act_limit * pi_action
-
         return pi_action, logp_pi
 
 
-class MLPQFunction(nn.Module):
+class MLPQFunctionBN(nn.Module):
     def __init__(self, obs_dim, act_dim, hidden_sizes, activation):
+        """
+        Builds a Q network that uses BatchNorm after each hidden layer.
+        The network takes as input the concatenation of state and action.
+        """
         super().__init__()
-        self.q = mlp([obs_dim + act_dim] + list(hidden_sizes) + [1], activation)
+        self.q = mlp_bn([obs_dim + act_dim] + list(hidden_sizes) + [1], activation)
 
     def forward(self, obs, act):
+        """Standard forward pass on one (s, a) pair."""
         q = self.q(torch.cat([obs, act], dim=-1))
-        return torch.squeeze(q, -1)  # Critical to ensure q has right shape.
+        return torch.squeeze(q, -1)  # Remove last dim
+
+    def forward_joint(self, obs, act, next_obs, next_act):
+        """
+        Implements the joint forward pass as described in the paper.
+        It concatenates the current and next (state, action) pairs so that
+        the BatchNorm layers compute normalization statistics over the union.
+        Then it splits the result back into q and next_q.
+        """
+        cat_obs = torch.cat([obs, next_obs], dim=0)
+        cat_act = torch.cat([act, next_act], dim=0)
+        cat_input = torch.cat([cat_obs, cat_act], dim=-1)
+        cat_q = self.q(cat_input)
+        # Assume the original batch size is the same for obs and next_obs.
+        q, next_q = torch.split(cat_q, obs.shape[0], dim=0)
+        return torch.squeeze(q, -1), torch.squeeze(next_q, -1)
 
 
+# An actor-critic model that uses the BN critic.
 class MLPActorCritic(nn.Module):
     def __init__(
         self,
@@ -87,19 +115,35 @@ class MLPActorCritic(nn.Module):
         activation=nn.ReLU,
     ):
         super().__init__()
-
         obs_dim = observation_space.shape[0]
         act_dim = action_space.shape[0]
         act_limit = action_space.high[0]
 
-        # build policy and value functions
         self.pi = SquashedGaussianMLPActor(
             obs_dim, act_dim, hidden_sizes, activation, act_limit
         )
-        self.q1 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
-        self.q2 = MLPQFunction(obs_dim, act_dim, hidden_sizes, activation)
+        # Replace the standard Q networks with our BN-equipped critic networks.
+        self.q1 = MLPQFunctionBN(obs_dim, act_dim, hidden_sizes, activation)
+        self.q2 = MLPQFunctionBN(obs_dim, act_dim, hidden_sizes, activation)
 
     def act(self, obs, deterministic=False):
         with torch.no_grad():
             a, _ = self.pi(obs, deterministic, False)
             return a.cpu().numpy()
+
+
+# Example usage in a critic loss (conceptual):
+def critic_loss(q1_net, q2_net, policy, obs, act, rews, next_obs, gamma, alpha):
+    # Sample next actions from the current policy.
+    next_act, next_logpi = policy(next_obs)
+    # Use the joint forward pass on each Q network.
+    q1, next_q1 = q1_net.forward_joint(obs, act, next_obs, next_act)
+    q2, next_q2 = q2_net.forward_joint(obs, act, next_obs, next_act)
+    # Compute the target as the minimum over the two Q's (and apply the entropy correction).
+    next_q = torch.min(next_q1, next_q2)
+    target = rews + gamma * (next_q - alpha * next_logpi)
+    # Critic loss is the MSE error for both Q functions.
+    loss_q1 = F.mse_loss(q1, target.detach())
+    loss_q2 = F.mse_loss(q2, target.detach())
+    loss = loss_q1 + loss_q2
+    return loss

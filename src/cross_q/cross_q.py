@@ -79,79 +79,9 @@ def sac(
     device="auto",
 ):
     """
-    Soft Actor-Critic (SAC)
-
-    SAC is an off-policy actor-critic deep RL algorithm that optimizes a stochastic
-    policy in an entropy-regularized reinforcement learning framework. The actor aims
-    to maximize expected return while also maximizing entropy --- that is,
-    succeed at the task while acting as randomly as possible.
-
-    Args:
-        env_fn : A function which creates a copy of the environment.
-        actor_critic: The constructor method for a PyTorch Module with an ``act``
-            method, a ``pi`` module, a ``q1`` module, and a ``q2`` module.
-            The ``act`` method and ``pi`` module should accept batches of
-            observations as inputs, and ``q1`` and ``q2`` should accept a batch
-            of observations and a batch of actions as inputs. When called,
-            these should return:
-
-            ===========  ================  ======================================
-            Call         Output Shape      Description
-            ===========  ================  ======================================
-            ``act``     (batch, act_dim)  | Numpy array of actions for each
-                                          | observation.
-            ``pi``      N/A               | Torch Distribution object, containing
-                                          | actions and log probs.
-            ``q1``      (batch,)          | Tensor containing one current estimate
-                                          | of Q* for the provided observations
-                                          | and actions.
-            ``q2``      (batch,)          | Tensor containing the other current
-                                          | estimate of Q* for the provided
-                                          | observations and actions.
-            ===========  ================  ======================================
-
-        ac_kwargs (dict): Any kwargs appropriate for the ActorCritic object
-            you provided to SAC.
-
-        seed (int): Seed for random number generators.
-
-        steps_per_epoch (int): Number of steps of interaction (state-action pairs)
-            for the agent and the environment in each epoch.
-
-        epochs (int): Number of epochs to run and train agent.
-
-        replay_size (int): Maximum length of replay buffer.
-
-        gamma (float): Discount factor. (Always between 0 and 1.)
-
-        lr (float): Learning rate (used for both policy and value learning).
-
-        alpha (float): Entropy regularization coefficient. (Equivalent to
-            inverse of reward scale in the original SAC paper.)
-
-        batch_size (int): Minibatch size for SGD.
-
-        start_steps (int): Number of steps for uniform-random action selection,
-            before running real policy. Helps exploration.
-
-        update_after (int): Number of env interactions to collect before
-            starting to do gradient descent updates. Ensures replay buffer
-            is full enough for useful updates.
-
-        update_every (int): Number of env interactions that should elapse
-            between gradient descent updates. Note: Regardless of how long
-            you wait between updates, the ratio of env steps to gradient steps
-            is locked to 1.
-
-        num_test_episodes (int): Number of episodes to test the deterministic
-            policy at the end of each epoch.
-
-        logger_kwargs (dict): Keyword args for EpochLogger.
-
-        save_freq (int): How often (in terms of gap between epochs) to save
-            the current policy and value function.
-
-        device (str): Device to run the model on.
+    Soft Actor-Critic (SAC) with a BN-equipped critic that uses a joint forward pass.
+    This removes the need for target networks by concatenating (s, a) and (s', a') batches,
+    ensuring that the BatchNorm layers see a mixture of both distributions.
     """
     local_vars = locals()
     logger = EpochLogger(**logger_kwargs)
@@ -164,15 +94,14 @@ def sac(
     obs_dim = env.observation_space.shape
     act_dim = env.action_space.shape[0]
 
-    # Create actor-critic module and target networks
+    # Create actor-critic module
     if device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
-
     _device = torch.device(device)
     logger.log("Device: %s" % device)
     ac = actor_critic(env.observation_space, env.action_space, **ac_kwargs).to(_device)
 
-    # List of parameters for both Q-networks (save this for convenience)
+    # List of parameters for both Q-networks
     q_params = itertools.chain(ac.q1.parameters(), ac.q2.parameters())
 
     # Experience buffer
@@ -180,11 +109,11 @@ def sac(
         obs_dim=obs_dim, act_dim=act_dim, size=replay_size, device=_device
     )
 
-    # Count variables (protip: try to get a feel for how different size networks behave!)
+    # Count variables
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q1, ac.q2])
     logger.log("\nNumber of parameters: \t pi: %d, \t q1: %d, \t q2: %d\n" % var_counts)
 
-    # Set up function for computing SAC Q-losses
+    # Set up function for computing SAC Q-losses with joint forward pass
     def compute_loss_q(data):
         obs, action, reward, obs2, done = (
             data["obs"],
@@ -194,29 +123,23 @@ def sac(
             data["done"],
         )
 
-        q1 = ac.q1(obs, action)
-        q2 = ac.q2(obs, action)
-
-        # Bellman backup for Q functions
         with torch.no_grad():
-            # Actions come from current policy
+            # Get next actions and corresponding log-probs
             a2, logp_a2 = ac.pi(obs2)
-
-            # Use main network instead of target network
-            q1_pi = ac.q1(obs2, a2)
-            q2_pi = ac.q2(obs2, a2)
-            q_pi = torch.min(q1_pi, q2_pi)
+            # Use the joint forward pass so that BatchNorm sees both current and next samples
+            q1_current, q1_next = ac.q1.forward_joint(obs, action, obs2, a2)
+            q2_current, q2_next = ac.q2.forward_joint(obs, action, obs2, a2)
+            # Use the minimum of the next Q estimates for the target, with entropy correction
+            q_pi = torch.min(q1_next, q2_next)
             backup = reward + gamma * (1 - done) * (q_pi - alpha * logp_a2)
 
-        # MSE loss against Bellman backup
-        loss_q1 = ((q1 - backup) ** 2).mean()
-        loss_q2 = ((q2 - backup) ** 2).mean()
+        loss_q1 = ((q1_current - backup) ** 2).mean()
+        loss_q2 = ((q2_current - backup) ** 2).mean()
         loss_q = loss_q1 + loss_q2
 
-        # Useful info for logging
         q_info = dict(
-            Q1Vals=q1.detach().cpu().numpy(),
-            Q2Vals=q2.detach().cpu().numpy(),
+            Q1Vals=q1_current.detach().cpu().numpy(),
+            Q2Vals=q2_current.detach().cpu().numpy(),
         )
 
         return loss_q, q_info
@@ -229,12 +152,9 @@ def sac(
         q2_pi = ac.q2(obs, pi)
         q_pi = torch.min(q1_pi, q2_pi)
 
-        # Entropy-regularized policy loss
         loss_pi = (alpha * logp_pi - q_pi).mean()
 
-        # Useful info for logging
         pi_info = dict(LogPi=logp_pi.detach().cpu().numpy())
-
         return loss_pi, pi_info
 
     # Set up optimizers for policy and q-function
@@ -245,31 +165,25 @@ def sac(
     logger.setup_pytorch_saver(ac)
 
     def update(data):
-        # First run one gradient descent step for Q1 and Q2
+        # First update the Q-networks using the joint forward pass
         q_optimizer.zero_grad()
         loss_q, q_info = compute_loss_q(data)
         loss_q.backward()
         q_optimizer.step()
-
-        # Record things
         logger.store(LossQ=loss_q.item(), **q_info)
 
-        # Freeze Q-networks so you don't waste computational effort
-        # computing gradients for them during the policy learning step.
+        # Freeze Q-networks while updating the policy
         for p in q_params:
             p.requires_grad = False
 
-        # Next run one gradient descent step for pi.
         pi_optimizer.zero_grad()
         loss_pi, pi_info = compute_loss_pi(data)
         loss_pi.backward()
         pi_optimizer.step()
 
-        # Unfreeze Q-networks so you can optimize it at next DDPG step.
         for p in q_params:
             p.requires_grad = True
 
-        # Record things
         logger.store(LossPi=loss_pi.item(), **pi_info)
 
     def get_action(obs, deterministic=False):
@@ -281,70 +195,47 @@ def sac(
             obs, _ = test_env.reset()
             ep_ret, ep_len = 0, 0
             terminated, truncated = False, False
-
             while not (terminated or truncated):
-                # Take deterministic actions at test time
                 action = get_action(obs, True)
                 obs, reward, terminated, truncated, _ = test_env.step(action)
                 ep_ret += reward
                 ep_len += 1
-
             logger.store(TestEpRet=ep_ret, TestEpLen=ep_len)
 
-    # Prepare for interaction with environment
+    # Main interaction loop
     total_steps = steps_per_epoch * epochs
     start_time = time.time()
-
     obs, _ = env.reset()
     ep_ret, ep_len = 0, 0
 
-    # Main loop: collect experience in env and update/log each epoch
     for t in range(total_steps):
-        # Until start_steps have elapsed, randomly sample actions
-        # from a uniform distribution for better exploration. Afterwards,
-        # use the learned policy.
         if t >= start_steps:
             action = get_action(obs)
         else:
             action = env.action_space.sample()
 
-        # Step the env
         obs2, reward, terminated, truncated, _ = env.step(action)
-
         ep_ret += reward
         ep_len += 1
 
-        # Store experience to replay buffer
         replay_buffer.store(obs, action, reward, obs2, terminated)
-
-        # Super critical, easy to overlook step: make sure to update
-        # most recent observation!
         obs = obs2
 
-        # End of trajectory handling
         if terminated or truncated:
             logger.store(EpRet=ep_ret, EpLen=ep_len)
             obs, _ = env.reset()
             ep_ret, ep_len = 0, 0
 
-        # Update handling
         if t >= update_after and t % update_every == 0:
             for _ in range(update_every):
                 batch = replay_buffer.sample_batch(batch_size)
                 update(data=batch)
 
-        # End of epoch handling
         if (t + 1) % steps_per_epoch == 0:
             epoch = (t + 1) // steps_per_epoch
-
-            # Save model
             if (epoch % save_freq == 0) or (epoch == epochs):
                 logger.save_state({"env": env}, None)
-
-            # Test the performance of the deterministic version of the agent.
             test_agent()
-
-            # Log info about epoch
             logger.set_step(t)
             logger.log_tabular("Epoch", epoch)
             logger.log_tabular("EpRet", with_min_and_max=True)
@@ -378,7 +269,7 @@ if __name__ == "__main__":
 
     sac(
         lambda: gym.make(args.env),
-        actor_critic=core.MLPActorCritic,
+        actor_critic=core.MLPActorCritic,  # make sure this is the BN-enabled version
         ac_kwargs=dict(hidden_sizes=[args.hid] * args.l),
         gamma=args.gamma,
         seed=args.seed,
