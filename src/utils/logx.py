@@ -177,11 +177,7 @@ class Logger:
 
         # Log config to wandb if enabled
         if self.wandb:
-            for key, value in config_json.items():
-                try:
-                    self.wandb.config[key] = value
-                except Exception as e:
-                    print(f"Error logging config to wandb: {e}")
+            self.wandb.config.update(config_json)
 
         output = json.dumps(
             config_json, separators=(",", ":\t"), indent=4, sort_keys=True
