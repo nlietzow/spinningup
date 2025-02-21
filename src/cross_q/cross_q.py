@@ -216,6 +216,7 @@ class CrossQ:
             raise ValueError(f"Path {path} is a directory")
 
         model_path = path.with_suffix(".pth")
+        model_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.ac.state_dict(), model_path)
 
         if save_buffer:
