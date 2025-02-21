@@ -1,10 +1,9 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from gymnasium.core import Env
+from gymnasium import spaces
 from torch.distributions.normal import Normal
 from torch.nn.functional import softplus
-from gymnasium import spaces
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20
