@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).parents[2].resolve()))
 
 import src.cross_q.cross_q_policy as cross_q_policy  # noqa: E402
 from src.cross_q.cross_q_replay_buffer import Batch, ReplayBuffer  # noqa: E402
-from src.utils.logx import EpochLogger  # noqa: E402
+from src.logx import EpochLogger  # noqa: E402
 
 
 class CrossQ:
@@ -230,11 +230,9 @@ class CrossQ:
         test_env: gym.Env,
         num_test_episodes: int,
         save_freq: int,
-        logger_kwargs: dict,
     ) -> None:
         local_vars = locals()
-        logger = EpochLogger(**logger_kwargs)
-        logger.setup_pytorch_saver(self.ac)
+        logger = EpochLogger()
         logger.save_config(local_vars)
 
         torch.manual_seed(seed)
@@ -357,5 +355,4 @@ if __name__ == "__main__":
         update_after=args.update_after,
         update_every=args.update_every,
         save_freq=args.save_freq,
-        logger_kwargs=dict(),
     )

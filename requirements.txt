@@ -1,7 +1,7 @@
 gymnasium
 torch
+tensordict
 numpy
 tqdm
-joblib
 wandb
 box2d-py

@@ -13,7 +13,7 @@ sys.path.append(str(Path(__file__).parents[2].resolve()))
 
 import src.sac.core as core
 from src.config import setup_logger_kwargs
-from src.utils.logx import EpochLogger
+from src.logx import EpochLogger
 
 
 class ReplayBuffer:
