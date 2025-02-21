@@ -248,8 +248,8 @@ class CrossQ:
         test_env: gym.Env,
         epochs: int = 100,
         num_test_episodes: int = 10,
-        steps_per_epoch: int = 5_000,
-        start_steps: int = 1_000,
+        steps_per_epoch: int = 10_000,
+        start_steps: int = 10_000,
         policy_delay: int = 3,
         batch_size: int = 256,
         gamma: float = 0.99,
@@ -341,23 +341,13 @@ class CrossQ:
 
 
 if __name__ == "__main__":
-    import argparse
+    from src.environment import make_hockey_env
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--env", type=str, default="Hockey-v0")
-    args = parser.parse_args()
-
-    if args.env == "Hockey-v0":
-        gym.register(
-            id="Hockey-v0",
-            entry_point="src.environment.environment:HockeyEnv",
-        )
-
-    model = CrossQ(env=gym.make(args.env))
+    model = CrossQ(env=make_hockey_env())
     run, error = wandb.init(project="cross_q"), None
     try:
         model.learn(
-            test_env=gym.make(args.env),
+            test_env=make_hockey_env(),
             wandb_run=run,
         )
     except (KeyboardInterrupt, Exception) as e:
