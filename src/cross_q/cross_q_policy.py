@@ -143,6 +143,7 @@ class MLPActorCritic(nn.Module):
         self,
         observation_space: spaces.Space,
         action_space: spaces.Space,
+        alpha: float = 0.0,
         actor_hidden_sizes: tuple[int, int] = (256, 256),
         critic_hidden_sizes: tuple[int, int] = (1024, 1024),
         activation: type[nn.Module] = nn.ReLU,
@@ -169,6 +170,8 @@ class MLPActorCritic(nn.Module):
             )
             for _ in range(2)
         )
+
+        self.log_alpha = nn.Parameter(torch.tensor(alpha), requires_grad=True)
 
     def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
         obs = torch.as_tensor(obs, dtype=torch.float32, device=self.pi.net.device)

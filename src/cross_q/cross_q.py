@@ -26,12 +26,12 @@ class CrossQ:
         env: gym.Env,
         ac_kwargs: dict,
         replay_size: int,
-        alpha: float,
         device: str = None,
     ):
         self.env = env
         self.obs_dim = self.env.observation_space.shape
         self.act_dim = self.env.action_space.shape[0]
+        self.target_entropy = -float(self.act_dim)
 
         if device is None or device == "auto":
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -39,12 +39,6 @@ class CrossQ:
             self.device = torch.device(device)
 
         print(f"Device: {self.device}")
-
-        # Setup adaptive alpha parameter
-        self.target_entropy = -float(self.act_dim)
-        self.log_alpha = torch.tensor(
-            np.log(alpha), requires_grad=True, device=self.device
-        )
 
         # Create actor-critic module
         self.ac = cross_q_policy.MLPActorCritic(
@@ -120,7 +114,7 @@ class CrossQ:
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = batch.reward + gamma * (1 - batch.done) * (
-                q_pi - self.log_alpha.exp() * logp_a2
+                q_pi - self.ac.log_alpha.exp() * logp_a2
             )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()
@@ -163,12 +157,15 @@ class CrossQ:
 
         # Adaptive alpha update
         self.alpha_optimizer.zero_grad()
-        loss_alpha = -(self.log_alpha * (logp_pi.detach() + self.target_entropy)).mean()
+        loss_alpha = -(
+            self.ac.log_alpha * (logp_pi.detach() + self.target_entropy)
+        ).mean()
         loss_alpha.backward()
         self.alpha_optimizer.step()
 
         self.logger.store(
-            Alpha=self.log_alpha.exp().item(), LossAlpha=loss_alpha.item()
+            Alpha=self.ac.log_alpha.exp().item(),
+            LossAlpha=loss_alpha.item(),
         )
 
     def test_agent(self, test_env: gym.Env, num_test_episodes: int) -> None:
@@ -224,7 +221,7 @@ class CrossQ:
 
         self._q_optimizer = Adam(self.q_params, lr=lr, betas=betas)
         self._pi_optimizer = Adam(self.ac.pi.parameters(), lr=lr, betas=betas)
-        self._alpha_optimizer = Adam([self.log_alpha], lr=lr, betas=betas)
+        self._alpha_optimizer = Adam([self.ac.log_alpha], lr=lr, betas=betas)
 
         # Main interaction loop
         total_steps = steps_per_epoch * epochs
@@ -303,7 +300,6 @@ if __name__ == "__main__":
     parser.add_argument("--replay_size", type=int, default=int(1e6))
     parser.add_argument("--gamma", type=float, default=0.99)
     parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--alpha", type=float, default=0.1)
     parser.add_argument("--batch_size", type=int, default=256)
     parser.add_argument("--start_steps", type=int, default=1000)
     parser.add_argument("--update_after", type=int, default=1000)
@@ -324,7 +320,6 @@ if __name__ == "__main__":
         env=gym.make(args.env),
         ac_kwargs=dict(),
         replay_size=args.replay_size,
-        alpha=args.alpha,
         device=args.device,
     )
     model.learn(
