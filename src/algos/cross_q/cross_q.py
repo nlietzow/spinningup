@@ -10,7 +10,7 @@ import wandb
 from gymnasium import spaces
 from torch.optim import Adam
 
-sys.path.append(str(Path(__file__).parents[2].resolve()))
+sys.path.append(str(Path(__file__).parents[3].resolve()))
 
 from src.algos.common.replay_buffer import Batch, ReplayBuffer  # noqa: E402
 from src.algos.cross_q.policy import CrossQActorCritic  # noqa: E402
