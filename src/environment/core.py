@@ -192,7 +192,7 @@ class HockeyEnvCore(gym.Env, EzPickle):
             -1, +1, (self.num_actions * 2,), dtype=np.float32
         )
 
-        # see discrete_to_continous_action()
+        # see discrete_to_continuous_action()
         self.discrete_action_space = spaces.Discrete(7)
 
         self.verbose = verbose
@@ -704,7 +704,8 @@ class HockeyEnvCore(gym.Env, EzPickle):
 
     def _get_info(self):
         # different proxy rewards:
-        # Proxy reward/penalty for not being close to puck in the own half when puck is flying towards goal (not to opponent)
+        # Proxy reward/penalty for not being close to puck in the own half
+        # when puck is flying towards goal (not to opponent)
         reward_closeness_to_puck = 0
         if self.puck.position[0] < CENTER_X and self.puck.linearVelocity[0] <= 0:
             dist_to_puck = dist_positions(self.player1.position, self.puck.position)
@@ -883,7 +884,7 @@ class HockeyEnvCore(gym.Env, EzPickle):
             self.closest_to_goal_dist, dist_positions(self.puck.position, (W, H / 2))
         )
         self.time += 1
-        # Todo: maybe use the truncation flag when the time runs out!
+
         return obs, reward, self.done, truncated, info
 
     def render(self, mode="human"):

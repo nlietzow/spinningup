@@ -71,18 +71,18 @@ class ReplayBuffer:
         self.size = min(self.size + 1, self.max_size)
 
     def sample_batch(self, batch_size) -> Batch:
-        idxs = torch.randint(
+        indices = torch.randint(
             0,
             self.size,
             (batch_size,),
             device=self.device,
         )
         return Batch(
-            obs=self.obs_buf[idxs],
-            obs2=self.obs2_buf[idxs],
-            act=self.act_buf[idxs],
-            reward=self.rew_buf[idxs],
-            done=self.done_buf[idxs],
+            obs=self.obs_buf[indices],
+            obs2=self.obs2_buf[indices],
+            act=self.act_buf[indices],
+            reward=self.rew_buf[indices],
+            done=self.done_buf[indices],
         )
 
     @staticmethod
@@ -92,9 +92,9 @@ class ReplayBuffer:
         if shape is None:
             return (length,)
         if isinstance(shape, int):
-            return (length, shape)
+            return length, shape
 
-        return (length, *shape)
+        return length, *shape
 
     def save(self, path: Path) -> None:
         torch.save(

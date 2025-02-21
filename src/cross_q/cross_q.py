@@ -6,6 +6,8 @@ from typing import Optional
 import gymnasium as gym
 import numpy as np
 import torch
+import wandb
+from gymnasium import spaces
 from torch.optim import Adam
 
 sys.path.append(str(Path(__file__).parents[2].resolve()))
@@ -30,6 +32,20 @@ class CrossQ:
         device: str = None,
     ):
         self.env = env
+
+        if not isinstance(self.env.observation_space, spaces.Box):
+            raise TypeError(
+                f"Expected Box observation space, got {type(self.env.observation_space)}"
+            )
+
+        if not isinstance(self.env.action_space, spaces.Box):
+            raise TypeError(
+                f"Expected Box action space, got {type(self.env.action_space)}"
+            )
+
+        observation_space: spaces.Box = self.env.observation_space
+        action_space: spaces.Box = self.env.action_space
+
         self.obs_dim = self.env.observation_space.shape
         self.act_dim = self.env.action_space.shape[0]
         self.target_entropy = -float(self.act_dim)
@@ -43,7 +59,7 @@ class CrossQ:
 
         # Create actor-critic module
         self.ac = cross_q_policy.MLPActorCritic(
-            env.observation_space, env.action_space, **ac_kwargs
+            observation_space, action_space, **ac_kwargs
         ).to(self.device)
 
         # List of parameters for both Q-networks
@@ -53,7 +69,7 @@ class CrossQ:
         self.replay_buffer = ReplayBuffer(
             obs_dim=self.obs_dim,
             act_dim=self.act_dim,
-            size=replay_size,
+            max_size=replay_size,
             device=self.device,
         )
 
@@ -101,7 +117,7 @@ class CrossQ:
     def compute_loss_q(self, batch: Batch, gamma: float) -> torch.Tensor:
         with torch.no_grad():
             # Get next actions and corresponding log-probs
-            a2, logp_a2 = self.ac.pi(batch.obs2)
+            a2, log_p_a2 = self.ac.pi(batch.obs2)
 
         # Use the joint forward pass so that BatchNorm sees both current and next samples
         q1_current, q1_next = self.ac.q1.forward_joint(
@@ -115,7 +131,7 @@ class CrossQ:
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = batch.reward + gamma * (1 - batch.done) * (
-                q_pi - self.ac.log_alpha.exp() * logp_a2
+                q_pi - self.ac.log_alpha.exp() * log_p_a2
             )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()
@@ -125,14 +141,14 @@ class CrossQ:
         return loss_q
 
     def compute_loss_pi(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
-        pi, logp_pi = self.ac.pi(batch.obs)
+        pi, log_p_pi = self.ac.pi(batch.obs)
         q1_pi = self.ac.q1(batch.obs, pi)
         q2_pi = self.ac.q2(batch.obs, pi)
         q_pi = torch.min(q1_pi, q2_pi)
 
-        loss_pi = (self.log_alpha.exp() * logp_pi - q_pi).mean()
+        loss_pi = (self.ac.log_alpha.exp() * log_p_pi - q_pi).mean()
 
-        return loss_pi, logp_pi
+        return loss_pi, log_p_pi
 
     def update(self, batch: Batch, gamma: float) -> None:
         # First update the Q-networks using the joint forward pass
@@ -147,7 +163,7 @@ class CrossQ:
             p.requires_grad = False
 
         self.pi_optimizer.zero_grad()
-        loss_pi, logp_pi = self.compute_loss_pi(batch)
+        loss_pi, log_p_pi = self.compute_loss_pi(batch)
         loss_pi.backward()
         self.pi_optimizer.step()
 
@@ -159,7 +175,7 @@ class CrossQ:
         # Adaptive alpha update
         self.alpha_optimizer.zero_grad()
         loss_alpha = -(
-            self.ac.log_alpha * (logp_pi.detach() + self.target_entropy)
+            self.ac.log_alpha * (log_p_pi.detach() + self.target_entropy)
         ).mean()
         loss_alpha.backward()
         self.alpha_optimizer.step()
@@ -210,11 +226,11 @@ class CrossQ:
     def load_model(
         cls, env: gym.Env, path: Path, buffer_path: Optional[Path] = None, **kwargs
     ) -> "CrossQ":
-        model = cls(env, **kwargs)
-        model.ac.load_state_dict(torch.load(path))
+        model_ = cls(env, **kwargs)
+        model_.ac.load_state_dict(torch.load(path))
         if buffer_path is not None:
-            model.replay_buffer.load(buffer_path)
-        return model
+            model_.replay_buffer.load(buffer_path)
+        return model_
 
     def learn(
         self,
@@ -231,10 +247,9 @@ class CrossQ:
         test_env: gym.Env,
         num_test_episodes: int,
         save_freq: int,
+        wandb_run: Optional[wandb.sdk.wandb_run.Run],
     ) -> None:
-        local_vars = locals()
-        logger = EpochLogger()
-        logger.save_config(local_vars)
+        self._logger = EpochLogger(wandb_run=wandb_run)
 
         torch.manual_seed(seed)
         np.random.seed(seed)
@@ -342,18 +357,27 @@ if __name__ == "__main__":
         replay_size=args.replay_size,
         device=args.device,
     )
-    model.learn(
-        seed=args.seed,
-        test_env=gym.make(args.env),
-        num_test_episodes=args.num_test_episodes,
-        steps_per_epoch=args.steps_per_epoch,
-        epochs=args.epochs,
-        gamma=args.gamma,
-        lr=args.lr,
-        betas=(0.5, 0.999),
-        batch_size=args.batch_size,
-        start_steps=args.start_steps,
-        update_after=args.update_after,
-        update_every=args.update_every,
-        save_freq=args.save_freq,
-    )
+
+    run, error = wandb.init(project="cross_q", config=args.__dict__), None
+    try:
+        model.learn(
+            seed=args.seed,
+            test_env=gym.make(args.env),
+            num_test_episodes=args.num_test_episodes,
+            steps_per_epoch=args.steps_per_epoch,
+            epochs=args.epochs,
+            gamma=args.gamma,
+            lr=args.lr,
+            betas=(0.5, 0.999),
+            batch_size=args.batch_size,
+            start_steps=args.start_steps,
+            update_after=args.update_after,
+            update_every=args.update_every,
+            save_freq=args.save_freq,
+            wandb_run=run,
+        )
+    except (KeyboardInterrupt, Exception) as e:
+        print(e)
+        error = e
+    finally:
+        run.finish(exit_code=0 if error is None else 1)

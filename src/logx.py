@@ -1,12 +1,7 @@
-import atexit
-import os
-import os.path as osp
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
-
 import wandb
-from src.config import DEFAULT_DATA_DIR
 
 color2num = dict(
     gray=30,
@@ -24,8 +19,6 @@ color2num = dict(
 def colorize(string, color, bold=False, highlight=False):
     """
     Colorize a string.
-
-    This function was originally written by John Schulman.
     """
     attr = []
     num = color2num[color]
@@ -37,16 +30,12 @@ def colorize(string, color, bold=False, highlight=False):
     return "\x1b[%sm%s\x1b[0m" % (";".join(attr), string)
 
 
-def statistics_scalar(x, with_min_and_max=False):
+def statistics_scalar(
+        x: list[float],
+        with_min_and_max: bool = False
+):
     """
     Get mean/std and optional min/max of scalar x.
-
-    Args:
-        x: An array containing samples of the scalar to produce statistics
-            for.
-
-        with_min_and_max (bool): If true, return min and max of x in
-            addition to mean and std.
     """
     x = np.array(x, dtype=np.float32)
     mean = np.mean(x)
@@ -64,13 +53,11 @@ class Logger:
     A general-purpose logger.
     """
 
-    def __init__(self, wandb_project: str = "cross_q"):
+    def __init__(self, wandb_run: Optional[wandb.sdk.wandb_run.Run] = None):
         """
         Initialize a Logger.
         """
-        # Initialize wandb
-        wandb.login()
-        self.wandb = wandb.init(project=wandb_project)
+        self.wandb = wandb_run
 
         self.first_row = True
         self.log_headers = []
@@ -80,7 +67,8 @@ class Logger:
     def set_step(self, step: int):
         self.step = step
 
-    def log(self, msg: str, color: str = "green"):
+    @staticmethod
+    def log(msg: str, color: str = "green"):
         print(colorize(msg, color, bold=True))
 
     def log_tabular(self, key: str, val: Any):
@@ -91,30 +79,30 @@ class Logger:
             self.log_headers.append(key)
         else:
             assert key in self.log_headers, (
-                "Trying to introduce a new key %s that you didn't include in the first iteration"
-                % key
+                    "Trying to introduce a new key %s that you didn't include in the first iteration"
+                    % key
             )
         assert key not in self.log_current_row, (
-            "You already set %s this iteration. Maybe you forgot to call dump_tabular()"
-            % key
+                "You already set %s this iteration. Maybe you forgot to call dump_tabular()"
+                % key
         )
         self.log_current_row[key] = val
 
     def dump_tabular(self):
         """
-        Write all of the diagnostics from the current iteration.
+        Write all the diagnostics from the current iteration.
         """
         vals = []
         key_lens = [len(key) for key in self.log_headers]
         max_key_len = max(15, max(key_lens))
-        keystr = "%" + "%d" % max_key_len
-        fmt = "| " + keystr + "s | %15s |"
+        key_str = "%" + "%d" % max_key_len
+        fmt = "| " + key_str + "s | %15s |"
         n_slashes = 22 + max_key_len
         print("-" * n_slashes)
         for key in self.log_headers:
             val = self.log_current_row.get(key, "")
-            valstr = "%8.3g" % val if hasattr(val, "__float__") else val
-            print(fmt % (key, valstr))
+            val_str = "%8.3g" % val if hasattr(val, "__float__") else val
+            print(fmt % (key, val_str))
             vals.append(val)
         print("-" * n_slashes, flush=True)
         self.log_current_row.clear()
@@ -126,11 +114,11 @@ class EpochLogger(Logger):
     A variant of Logger tailored for tracking average values over epochs.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, wandb_run: Optional[wandb.sdk.wandb_run.Run] = None):
+        super().__init__(wandb_run)
         self.epoch_dict: dict[str, list[float]] = dict()
 
-    def store(self, **kwargs: dict[str, float]):
+    def store(self, **kwargs: float):
         """
         Save something into the epoch_logger's current state.
         """
@@ -143,11 +131,11 @@ class EpochLogger(Logger):
             self.epoch_dict[k].append(v)
 
     def log_tabular(
-        self,
-        key: str,
-        val: Any = None,
-        with_min_and_max: bool = False,
-        average_only: bool = False,
+            self,
+            key: str,
+            val: Any = None,
+            with_min_and_max: bool = False,
+            average_only: bool = False,
     ):
         """
         Log a value or possibly the mean/std/min/max values of a diagnostic.
@@ -155,17 +143,12 @@ class EpochLogger(Logger):
         if val is not None:
             super().log_tabular(key, val)
         else:
-            v = self.epoch_dict[key]
-            vals = (
-                np.concatenate(v)
-                if isinstance(v[0], np.ndarray) and len(v[0].shape) > 0
-                else v
-            )
-            stats = statistics_scalar(vals, with_min_and_max=with_min_and_max)
+            epoch_vals = self.epoch_dict[key]
+            stats = statistics_scalar(epoch_vals, with_min_and_max=with_min_and_max)
 
             # Log to text file via parent class
             super().log_tabular(key if average_only else "Average" + key, stats[0])
-            if not (average_only):
+            if not average_only:
                 super().log_tabular("Std" + key, stats[1])
             if with_min_and_max:
                 super().log_tabular("Max" + key, stats[3])
