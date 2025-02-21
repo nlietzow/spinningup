@@ -19,31 +19,6 @@ def mlp(
             yield nn.Linear(sizes[j], sizes[j + 1])
             yield activation()
 
-        # Final layer without non-linearity.
-        yield nn.Linear(sizes[-2], sizes[-1])
-        yield output_activation()
-
-    return nn.Sequential(*build())
-
-
-def mlp_bn(
-    sizes: tuple[int, ...],
-    batch_norm_eps: float,
-    batch_norm_momentum: float,
-    activation: type[nn.Module],
-    output_activation: type[nn.Module],
-):
-    def build():
-        for j in range(len(sizes) - 2):
-            yield nn.Linear(sizes[j], sizes[j + 1])
-            yield nn.BatchNorm1d(
-                sizes[j + 1],
-                eps=batch_norm_eps,
-                momentum=batch_norm_momentum,
-            )
-            yield activation()
-
-        # Final layer without non-linearity.
         yield nn.Linear(sizes[-2], sizes[-1])
         yield output_activation()
 
@@ -80,10 +55,8 @@ class SquashedGaussianMLPActor(nn.Module):
         log_std = torch.clamp(log_std, LOG_STD_MIN, LOG_STD_MAX)
         std = torch.exp(log_std)
 
-        # Pre-squash distribution and sample
         pi_distribution = Normal(mu, std)
         if deterministic:
-            # Only used for evaluating policy at test time.
             pi_action = mu
         else:
             pi_action = pi_distribution.rsample()
@@ -100,54 +73,24 @@ class SquashedGaussianMLPActor(nn.Module):
         return pi_action, log_p_pi
 
 
-class MLPQFunctionBN(nn.Module):
+class MLPQFunction(nn.Module):
     def __init__(
         self,
         obs_dim: int,
         act_dim: int,
-        batch_norm_eps: float,
-        batch_norm_momentum: float,
         hidden_sizes: tuple[int, ...],
         activation: type[nn.Module],
     ):
-        """
-        Builds a Q network that uses BatchNorm after each hidden layer.
-        The network takes as input the concatenation of state and action.
-        """
         super().__init__()
-        self.q = mlp_bn(
+        self.q = mlp(
             sizes=(obs_dim + act_dim, *hidden_sizes, 1),
-            batch_norm_eps=batch_norm_eps,
-            batch_norm_momentum=batch_norm_momentum,
             activation=activation,
             output_activation=nn.Identity,
         )
 
     def forward(self, obs: torch.Tensor, act: torch.Tensor):
-        """Standard forward pass on one (s, a) pair."""
         q = self.q(torch.cat((obs, act), dim=-1))
         return torch.squeeze(q, -1)  # Remove last dim
-
-    def forward_joint(
-        self,
-        obs: torch.Tensor,
-        act: torch.Tensor,
-        next_obs: torch.Tensor,
-        next_act: torch.Tensor,
-    ):
-        """
-        Implements the joint forward pass as described in the paper.
-        It concatenates the current and next (state, action) pairs so that
-        the BatchNorm layers compute normalization statistics over the union.
-        Then it splits the result back into q and next_q.
-        """
-        cat_obs = torch.cat((obs, next_obs), dim=0)
-        cat_act = torch.cat((act, next_act), dim=0)
-        cat_input = torch.cat((cat_obs, cat_act), dim=-1)
-        cat_q = self.q(cat_input)
-        q, next_q = torch.split(cat_q, obs.shape[0], dim=0)
-
-        return torch.squeeze(q, -1), torch.squeeze(next_q, -1)
 
 
 class SACActorCritic(nn.Module):
@@ -157,8 +100,6 @@ class SACActorCritic(nn.Module):
         action_space: spaces.Box,
         init_alpha: float,
         alpha_trainable: bool,
-        batch_norm_eps: float,
-        batch_norm_momentum: float,
         actor_hidden_sizes: tuple[int, ...],
         critic_hidden_sizes: tuple[int, ...],
         activation: type[nn.Module] = nn.ReLU,
@@ -177,11 +118,9 @@ class SACActorCritic(nn.Module):
         )
 
         self.q1, self.q2 = (
-            MLPQFunctionBN(
+            MLPQFunction(
                 obs_dim=obs_dim,
                 act_dim=act_dim,
-                batch_norm_eps=batch_norm_eps,
-                batch_norm_momentum=batch_norm_momentum,
                 hidden_sizes=critic_hidden_sizes,
                 activation=activation,
             )
