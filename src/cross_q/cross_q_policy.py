@@ -28,6 +28,8 @@ def mlp(
 
 def mlp_bn(
     sizes: tuple[int, ...],
+    batch_norm_eps: float,
+    batch_norm_momentum: float,
     activation: type[nn.Module],
     output_activation: type[nn.Module],
 ):
@@ -35,8 +37,10 @@ def mlp_bn(
         for j in range(len(sizes) - 2):
             yield nn.Linear(sizes[j], sizes[j + 1])
             yield nn.BatchNorm1d(
-                sizes[j + 1], eps=0.001, momentum=0.01
-            )  # todo: double check with the paper for eps and momentum
+                sizes[j + 1],
+                eps=batch_norm_eps,
+                momentum=batch_norm_momentum,
+            )
             yield activation()
 
         # Final layer without non-linearity.
@@ -101,6 +105,8 @@ class MLPQFunctionBN(nn.Module):
         self,
         obs_dim: int,
         act_dim: int,
+        batch_norm_eps: float,
+        batch_norm_momentum: float,
         hidden_sizes: tuple[int, int],
         activation: type[nn.Module],
     ):
@@ -111,6 +117,8 @@ class MLPQFunctionBN(nn.Module):
         super().__init__()
         self.q = mlp_bn(
             sizes=(obs_dim + act_dim, *hidden_sizes, 1),
+            batch_norm_eps=batch_norm_eps,
+            batch_norm_momentum=batch_norm_momentum,
             activation=activation,
             output_activation=nn.Identity,
         )
@@ -147,7 +155,9 @@ class MLPActorCritic(nn.Module):
         self,
         observation_space: spaces.Box,
         action_space: spaces.Box,
-        alpha: float = 0.1,
+        init_alpha: float = 0.1,
+        batch_norm_eps: float = 1e-3,
+        batch_norm_momentum: float = 0.99,
         actor_hidden_sizes: tuple[int, int] = (256, 256),
         critic_hidden_sizes: tuple[int, int] = (1024, 1024),
         activation: type[nn.Module] = nn.ReLU,
@@ -169,13 +179,17 @@ class MLPActorCritic(nn.Module):
             MLPQFunctionBN(
                 obs_dim=obs_dim,
                 act_dim=act_dim,
+                batch_norm_eps=batch_norm_eps,
+                batch_norm_momentum=batch_norm_momentum,
                 hidden_sizes=critic_hidden_sizes,
                 activation=activation,
             )
             for _ in range(2)
         )
 
-        self.log_alpha = nn.Parameter(torch.tensor(np.log(alpha)), requires_grad=True)
+        self.log_alpha = nn.Parameter(
+            torch.tensor(np.log(init_alpha)), requires_grad=True
+        )
 
     def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
         obs = torch.as_tensor(obs, dtype=torch.float32, device=self.pi.device)
