@@ -380,4 +380,7 @@ if __name__ == "__main__":
         print(e)
         error = e
     finally:
+        model_path = Path(f"models/final")
+        model.save_model(model_path)
+        run.log_artifact(model_path, name="final_model")
         run.finish(exit_code=0 if error is None else 1)
