@@ -28,8 +28,6 @@ class SAC:
         self,
         env: gym.Env,
         replay_size: int = int(1e6),
-        batch_norm_eps: float = 1e-3,
-        batch_norm_momentum: float = 0.99,
         init_alpha: float = 0.01,
         alpha_trainable: bool = True,
         actor_hidden_sizes: tuple[int, ...] = (256, 256),
@@ -68,8 +66,6 @@ class SAC:
             action_space=action_space,
             init_alpha=init_alpha,
             alpha_trainable=alpha_trainable,
-            batch_norm_eps=batch_norm_eps,
-            batch_norm_momentum=batch_norm_momentum,
             actor_hidden_sizes=actor_hidden_sizes,
             critic_hidden_sizes=critic_hidden_sizes,
         )
