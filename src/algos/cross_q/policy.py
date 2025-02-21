@@ -156,6 +156,7 @@ class CrossQActorCritic(nn.Module):
         observation_space: spaces.Box,
         action_space: spaces.Box,
         init_alpha: float,
+        alpha_trainable: bool,
         batch_norm_eps: float,
         batch_norm_momentum: float,
         actor_hidden_sizes: tuple[int, ...],
@@ -188,7 +189,8 @@ class CrossQActorCritic(nn.Module):
         )
 
         self.log_alpha = nn.Parameter(
-            torch.tensor(np.log(init_alpha)), requires_grad=True
+            torch.tensor(np.log(init_alpha)),
+            requires_grad=alpha_trainable,
         )
 
     def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
