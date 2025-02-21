@@ -109,25 +109,23 @@ class ReplayBuffer:
                     "size": torch.tensor(self.size, device="cpu"),
                     "max_size": torch.tensor(self.max_size, device="cpu"),
                 },
-                batch_size=[],
+                batch_size=[self.max_size],
             ),
             path,
         )
 
-    @classmethod
-    def load(cls, path: Path, device: torch.device) -> "ReplayBuffer":
+    def load(self, path: Path) -> None:
         data = torch.load(path)
-        buffer = cls(
-            obs_dim=data["obs_buf"].shape[1:],
-            act_dim=data["act_buf"].shape[1:],
-            max_size=data["max_size"].item(),
-            device=device,
-        )
-        buffer.obs_buf = data["obs_buf"].to(device)
-        buffer.obs2_buf = data["obs2_buf"].to(device)
-        buffer.act_buf = data["act_buf"].to(device)
-        buffer.rew_buf = data["rew_buf"].to(device)
-        buffer.done_buf = data["done_buf"].to(device)
-        buffer.ptr = data["ptr"].item()
-        buffer.size = data["size"].item()
-        return buffer
+
+        if data["max_size"].item() != self.max_size:
+            raise ValueError(
+                f"Max size mismatch: {data['max_size'].item()} != {self.max_size}"
+            )
+
+        self.obs_buf = data["obs_buf"].to(self.device)
+        self.obs2_buf = data["obs2_buf"].to(self.device)
+        self.act_buf = data["act_buf"].to(self.device)
+        self.rew_buf = data["rew_buf"].to(self.device)
+        self.done_buf = data["done_buf"].to(self.device)
+        self.ptr = data["ptr"].item()
+        self.size = data["size"].item()

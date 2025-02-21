@@ -1,6 +1,7 @@
 import sys
 import time
 from pathlib import Path
+from typing import Optional
 
 import gymnasium as gym
 import numpy as np
@@ -193,6 +194,26 @@ class CrossQ:
             TestEpLen=lengths.mean(),
             TestSuccess=success.mean(),
         )
+
+    def save_model(self, path: Path, save_buffer: bool = False) -> None:
+        if path.is_dir():
+            raise ValueError(f"Path {path} is a directory")
+
+        model_path = path.with_suffix(".pth")
+        torch.save(self.ac.state_dict(), model_path)
+
+        if save_buffer:
+            self.replay_buffer.save(path)
+
+    @classmethod
+    def load_model(
+        cls, env: gym.Env, path: Path, buffer_path: Optional[Path] = None, **kwargs
+    ) -> "CrossQ":
+        model = cls(env, **kwargs)
+        model.ac.load_state_dict(torch.load(path))
+        if buffer_path is not None:
+            model.replay_buffer.load(buffer_path)
+        return model
 
     def learn(
         self,
