@@ -203,7 +203,8 @@ class CrossQ:
         torch.save(self.ac.state_dict(), model_path)
 
         if save_buffer:
-            self.replay_buffer.save(path)
+            buffer_path = path.parent / f"{path.stem}_buffer"
+            self.replay_buffer.save(buffer_path)
 
     @classmethod
     def load_model(
@@ -289,7 +290,7 @@ class CrossQ:
                 epoch = (t + 1) // steps_per_epoch
 
                 if (epoch % save_freq == 0) or (epoch == epochs):
-                    self.logger.save_state({"env": self.env}, None)
+                    self.save_model(Path(f"models/cross_q_{epoch}"))
 
                 self.test_agent(test_env, num_test_episodes)
 
