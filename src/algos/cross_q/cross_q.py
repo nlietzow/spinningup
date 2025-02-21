@@ -6,15 +6,16 @@ from typing import Optional
 import gymnasium as gym
 import numpy as np
 import torch
-import wandb
 from gymnasium import spaces
 from torch.optim import Adam
 
+import wandb
+
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
-import src.cross_q.cross_q_policy as cross_q_policy  # noqa: E402
-from src.cross_q.cross_q_replay_buffer import Batch, ReplayBuffer  # noqa: E402
-from src.logx import EpochLogger  # noqa: E402
+from src.algos.common.replay_buffer import Batch, ReplayBuffer  # noqa: E402
+from src.algos.cross_q.policy import CrossQActorCritic  # noqa: E402
+from src.utils.logx import EpochLogger  # noqa: E402
 
 
 class CrossQ:
@@ -58,9 +59,9 @@ class CrossQ:
         print(f"Device: {self.device}")
 
         # Create actor-critic module
-        self.ac = cross_q_policy.MLPActorCritic(
-            observation_space, action_space, **ac_kwargs
-        ).to(self.device)
+        self.ac = CrossQActorCritic(observation_space, action_space, **ac_kwargs).to(
+            self.device
+        )
 
         # List of parameters for both Q-networks
         self.q_params = tuple(self.ac.q1.parameters()) + tuple(self.ac.q2.parameters())
@@ -212,24 +213,24 @@ class CrossQ:
             TestSuccess=success.mean(),
         )
 
-    def save_model(self, path: Path, save_buffer: bool = False) -> None:
-        if path.is_dir():
-            raise ValueError(f"Path {path} is a directory")
+    def save_model(self, model_path: Path, save_buffer: bool = False) -> None:
+        if model_path.is_dir():
+            raise ValueError(f"Path {model_path} is a directory")
 
-        model_path = path.with_suffix(".pth")
+        model_path = model_path.with_suffix(".pth")
         model_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(self.ac.state_dict(), model_path)
 
         if save_buffer:
-            buffer_path = path.parent / f"{path.stem}_buffer"
+            buffer_path = model_path.parent / f"{model_path.stem}_buffer"
             self.replay_buffer.save(buffer_path)
 
     @classmethod
     def load_model(
-        cls, env: gym.Env, path: Path, buffer_path: Optional[Path] = None, **kwargs
+        cls, env: gym.Env, model_path: Path, buffer_path: Optional[Path] = None, **kwargs
     ) -> "CrossQ":
         model_ = cls(env, **kwargs)
-        model_.ac.load_state_dict(torch.load(path))
+        model_.ac.load_state_dict(torch.load(model_path))
         if buffer_path is not None:
             model_.replay_buffer.load(buffer_path)
         return model_
@@ -297,7 +298,7 @@ class CrossQ:
                 obs, info = self.env.reset()
                 ep_ret, ep_len = 0, 0
 
-            if t >= start_steps:
+            if self.replay_buffer.size >= batch_size:
                 batch = self.replay_buffer.sample_batch(batch_size)
                 update_policy = (t + 1) % policy_delay == 0
                 self.update(
@@ -395,7 +396,7 @@ if __name__ == "__main__":
         print(e)
         error = e
     finally:
-        model_path = Path(f"models/{run.id}")
-        model.save_model(model_path)
-        run.log_artifact(model_path, name="model")
+        path = Path(f"models/{run.id}")
+        model.save_model(path)
+        run.log_artifact(path, name="model")
         run.finish(exit_code=0 if error is None else 1)

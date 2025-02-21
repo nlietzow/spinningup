@@ -150,7 +150,7 @@ class MLPQFunctionBN(nn.Module):
         return torch.squeeze(q, -1), torch.squeeze(next_q, -1)
 
 
-class MLPActorCritic(nn.Module):
+class CrossQActorCritic(nn.Module):
     def __init__(
         self,
         observation_space: spaces.Box,
