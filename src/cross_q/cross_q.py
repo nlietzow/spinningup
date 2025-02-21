@@ -173,18 +173,18 @@ class CrossQ:
 
             self.logger.store(LossPi=loss_pi.item())
 
-        # Adaptive alpha update
-        self.alpha_optimizer.zero_grad()
-        loss_alpha = -(
-            self.ac.log_alpha * (log_p_pi.detach() + self.target_entropy)
-        ).mean()
-        loss_alpha.backward()
-        self.alpha_optimizer.step()
+            # Adaptive alpha update
+            self.alpha_optimizer.zero_grad()
+            loss_alpha = -(
+                self.ac.log_alpha * (log_p_pi.detach() + self.target_entropy)
+            ).mean()
+            loss_alpha.backward()
+            self.alpha_optimizer.step()
 
-        self.logger.store(
-            Alpha=self.ac.log_alpha.exp().item(),
-            LossAlpha=loss_alpha.item(),
-        )
+            self.logger.store(
+                Alpha=self.ac.log_alpha.exp().item(),
+                LossAlpha=loss_alpha.item(),
+            )
 
     def test_agent(self, test_env: gym.Env, num_test_episodes: int) -> None:
         returns, lengths, success = (
