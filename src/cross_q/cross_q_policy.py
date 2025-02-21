@@ -159,7 +159,7 @@ class MLPActorCritic(nn.Module):
         batch_norm_eps: float = 1e-3,
         batch_norm_momentum: float = 0.99,
         actor_hidden_sizes: tuple[int, int] = (256, 256),
-        critic_hidden_sizes: tuple[int, int] = (1024, 1024),
+        critic_hidden_sizes: tuple[int, int] = (2048, 2048),
         activation: type[nn.Module] = nn.ReLU,
     ):
         super().__init__()

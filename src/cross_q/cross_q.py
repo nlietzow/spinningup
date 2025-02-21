@@ -150,7 +150,7 @@ class CrossQ:
 
         return loss_pi, log_p_pi
 
-    def update(self, batch: Batch, gamma: float) -> None:
+    def update(self, batch: Batch, gamma: float, update_policy: bool) -> None:
         # First update the Q-networks using the joint forward pass
         self.q_optimizer.zero_grad()
         loss_q = self.compute_loss_q(batch, gamma)
@@ -158,19 +158,20 @@ class CrossQ:
         self.q_optimizer.step()
         self.logger.store(LossQ=loss_q.item())
 
-        # Freeze Q-networks while updating the policy
-        for p in self.q_params:
-            p.requires_grad = False
+        if update_policy:
+            # Freeze Q-networks while updating the policy
+            for p in self.q_params:
+                p.requires_grad = False
 
-        self.pi_optimizer.zero_grad()
-        loss_pi, log_p_pi = self.compute_loss_pi(batch)
-        loss_pi.backward()
-        self.pi_optimizer.step()
+            self.pi_optimizer.zero_grad()
+            loss_pi, log_p_pi = self.compute_loss_pi(batch)
+            loss_pi.backward()
+            self.pi_optimizer.step()
 
-        for p in self.q_params:
-            p.requires_grad = True
+            for p in self.q_params:
+                p.requires_grad = True
 
-        self.logger.store(LossPi=loss_pi.item())
+            self.logger.store(LossPi=loss_pi.item())
 
         # Adaptive alpha update
         self.alpha_optimizer.zero_grad()
@@ -238,8 +239,7 @@ class CrossQ:
         epochs: int,
         steps_per_epoch: int,
         start_steps: int,
-        update_after: int,
-        update_every: int,
+        policy_delay: int,
         batch_size: int,
         gamma: float,
         seed: int,
@@ -297,10 +297,14 @@ class CrossQ:
                 obs, info = self.env.reset()
                 ep_ret, ep_len = 0, 0
 
-            if t >= update_after and t % update_every == 0:
-                for _ in range(update_every):
-                    batch = self.replay_buffer.sample_batch(batch_size)
-                    self.update(batch, gamma)
+            if t >= start_steps:
+                batch = self.replay_buffer.sample_batch(batch_size)
+                update_policy = (t + 1) % policy_delay == 0
+                self.update(
+                    batch,
+                    gamma,
+                    update_policy,
+                )
 
             if (t + 1) % steps_per_epoch == 0:
                 epoch = (t + 1) // steps_per_epoch
@@ -329,20 +333,25 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--env", type=str, default="Hockey-v0")
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--steps_per_epoch", type=int, default=10_000)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--replay_size", type=int, default=int(1e6))
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--actor_hidden_sizes", type=tuple, default=(256, 256))
+    parser.add_argument("--batch_norm_eps", type=float, default=1e-3)
+    parser.add_argument("--batch_norm_momentum", type=float, default=0.99)
     parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--start_steps", type=int, default=1000)
-    parser.add_argument("--update_after", type=int, default=1000)
-    parser.add_argument("--update_every", type=int, default=1)
-    parser.add_argument("--num_test_episodes", type=int, default=10)
-    parser.add_argument("--save_freq", type=int, default=10)
+    parser.add_argument("--betas", type=tuple, default=(0.5, 0.999))
+    parser.add_argument("--critic_hidden_sizes", type=tuple, default=(2048, 2048))
     parser.add_argument("--device", type=str, default="auto")
+    parser.add_argument("--env", type=str, default="Hockey-v0")
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--gamma", type=float, default=0.99)
+    parser.add_argument("--init_alpha", type=float, default=0.1)
+    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--num_test_episodes", type=int, default=10)
+    parser.add_argument("--replay_size", type=int, default=int(1e6))
+    parser.add_argument("--save_freq", type=int, default=10)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--start_steps", type=int, default=1000)
+    parser.add_argument("--steps_per_epoch", type=int, default=10_000)
+    parser.add_argument("--policy_delay", type=int, default=3)
 
     args = parser.parse_args()
 
@@ -354,7 +363,13 @@ if __name__ == "__main__":
 
     model = CrossQ(
         env=gym.make(args.env),
-        ac_kwargs=dict(),
+        ac_kwargs=dict(
+            batch_norm_eps=args.batch_norm_eps,
+            batch_norm_momentum=args.batch_norm_momentum,
+            init_alpha=args.init_alpha,
+            actor_hidden_sizes=args.actor_hidden_sizes,
+            critic_hidden_sizes=args.critic_hidden_sizes,
+        ),
         replay_size=args.replay_size,
         device=args.device,
     )
@@ -369,11 +384,10 @@ if __name__ == "__main__":
             epochs=args.epochs,
             gamma=args.gamma,
             lr=args.lr,
-            betas=(0.5, 0.999),
+            betas=args.betas,
             batch_size=args.batch_size,
             start_steps=args.start_steps,
-            update_after=args.update_after,
-            update_every=args.update_every,
+            policy_delay=args.policy_delay,
             save_freq=args.save_freq,
             wandb_run=run,
         )
@@ -381,7 +395,7 @@ if __name__ == "__main__":
         print(e)
         error = e
     finally:
-        model_path = Path(f"models/final")
+        model_path = Path(f"models/{run.id}")
         model.save_model(model_path)
-        run.log_artifact(model_path, name="final_model")
+        run.log_artifact(model_path, name="model")
         run.finish(exit_code=0 if error is None else 1)
