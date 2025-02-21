@@ -4,6 +4,7 @@ import torch.nn as nn
 from gymnasium.core import Env
 from torch.distributions.normal import Normal
 from torch.nn.functional import softplus
+from gymnasium import spaces
 
 LOG_STD_MAX = 2
 LOG_STD_MIN = -20
@@ -141,8 +142,8 @@ class MLPQFunctionBN(nn.Module):
 class MLPActorCritic(nn.Module):
     def __init__(
         self,
-        observation_space: Env.observation_space,
-        action_space: Env.action_space,
+        observation_space: spaces.Space,
+        action_space: spaces.Space,
         actor_hidden_sizes: tuple[int, int] = (256, 256),
         critic_hidden_sizes: tuple[int, int] = (1024, 1024),
         activation: type[nn.Module] = nn.ReLU,
