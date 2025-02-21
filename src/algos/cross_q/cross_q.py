@@ -6,10 +6,9 @@ from typing import Optional
 import gymnasium as gym
 import numpy as np
 import torch
+import wandb
 from gymnasium import spaces
 from torch.optim import Adam
-
-import wandb
 
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
@@ -26,11 +25,15 @@ class CrossQ:
     """
 
     def __init__(
-        self,
-        env: gym.Env,
-        ac_kwargs: dict,
-        replay_size: int,
-        device: str = None,
+            self,
+            env: gym.Env,
+            replay_size: int = int(1e6),
+            batch_norm_eps: float = 1e-3,
+            batch_norm_momentum: float = 0.99,
+            init_alpha: float = 0.01,
+            actor_hidden_sizes: tuple[int, ...] = (256, 256),
+            critic_hidden_sizes: tuple[int, ...] = (2048, 2048),
+            device: str = "auto",
     ):
         self.env = env
 
@@ -47,8 +50,8 @@ class CrossQ:
         observation_space: spaces.Box = self.env.observation_space
         action_space: spaces.Box = self.env.action_space
 
-        self.obs_dim = self.env.observation_space.shape
-        self.act_dim = self.env.action_space.shape[0]
+        self.obs_dim = observation_space.shape
+        self.act_dim = action_space.shape[0]
         self.target_entropy = -float(self.act_dim)
 
         if device is None or device == "auto":
@@ -59,9 +62,16 @@ class CrossQ:
         print(f"Device: {self.device}")
 
         # Create actor-critic module
-        self.ac = CrossQActorCritic(observation_space, action_space, **ac_kwargs).to(
-            self.device
+        self.ac = CrossQActorCritic(
+            observation_space=observation_space,
+            action_space=action_space,
+            init_alpha=init_alpha,
+            batch_norm_eps=batch_norm_eps,
+            batch_norm_momentum=batch_norm_momentum,
+            actor_hidden_sizes=actor_hidden_sizes,
+            critic_hidden_sizes=critic_hidden_sizes,
         )
+        self.ac.to(self.device)
 
         # List of parameters for both Q-networks
         self.q_params = tuple(self.ac.q1.parameters()) + tuple(self.ac.q2.parameters())
@@ -81,15 +91,6 @@ class CrossQ:
 
         # Logger
         self._logger = None
-
-        # Count variables
-        var_counts = tuple(
-            sum(p.numel() for p in module.parameters())
-            for module in [self.ac.pi, self.ac.q1, self.ac.q2]
-        )
-        print(
-            f"\nNumber of parameters: \t pi: {var_counts[0]}, \t q1: {var_counts[1]}, \t q2: {var_counts[2]}\n"
-        )
 
     @property
     def q_optimizer(self) -> Adam:
@@ -132,7 +133,7 @@ class CrossQ:
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = batch.reward + gamma * (1 - batch.done) * (
-                q_pi - self.ac.log_alpha.exp() * log_p_a2
+                    q_pi - self.ac.log_alpha.exp() * log_p_a2
             )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()
@@ -175,23 +176,24 @@ class CrossQ:
             self.logger.store(LossPi=loss_pi.item())
 
             # Adaptive alpha update
-            self.alpha_optimizer.zero_grad()
-            loss_alpha = -(
-                self.ac.log_alpha * (log_p_pi.detach() + self.target_entropy)
-            ).mean()
-            loss_alpha.backward()
-            self.alpha_optimizer.step()
+            if self.ac.log_alpha.requires_grad:
+                self.alpha_optimizer.zero_grad()
+                loss_alpha = -(
+                        self.ac.log_alpha * (log_p_pi.detach() + self.target_entropy)
+                ).mean()
+                loss_alpha.backward()
+                self.alpha_optimizer.step()
 
-            self.logger.store(
-                Alpha=self.ac.log_alpha.exp().item(),
-                LossAlpha=loss_alpha.item(),
-            )
+                self.logger.store(
+                    Alpha=self.ac.log_alpha.exp().item(),
+                    LossAlpha=loss_alpha.item(),
+                )
 
     def test_agent(self, test_env: gym.Env, num_test_episodes: int) -> None:
         returns, lengths, success = (
-            np.zeros(num_test_episodes),
-            np.zeros(num_test_episodes),
-            np.zeros(num_test_episodes),
+            np.zeros(num_test_episodes, dtype=np.float32),
+            np.zeros(num_test_episodes, dtype=np.int32),
+            np.zeros(num_test_episodes, dtype=np.bool),
         )
         for ep in range(num_test_episodes):
             obs, info = test_env.reset()
@@ -208,9 +210,9 @@ class CrossQ:
             success[ep] = info.get("is_success", False)
 
         self.logger.store(
-            TestEpRet=returns.mean(),
-            TestEpLen=lengths.mean(),
-            TestSuccess=success.mean(),
+            TestEpRet=float(returns.mean()),
+            TestEpLen=float(lengths.mean()),
+            TestSuccess=float(success.mean()),
         )
 
     def save_model(self, model_path: Path, save_buffer: bool = False) -> None:
@@ -222,39 +224,40 @@ class CrossQ:
         torch.save(self.ac.state_dict(), model_path)
 
         if save_buffer:
-            buffer_path = model_path.parent / f"{model_path.stem}_buffer"
+            buffer_path = model_path.with_suffix(".buffer.pth")
             self.replay_buffer.save(buffer_path)
 
     @classmethod
     def load_model(
-        cls, env: gym.Env, model_path: Path, buffer_path: Optional[Path] = None, **kwargs
+            cls, env: gym.Env, model_path: Path, buffer_path: Optional[Path] = None, **kwargs
     ) -> "CrossQ":
-        model_ = cls(env, **kwargs)
-        model_.ac.load_state_dict(torch.load(model_path))
+        model_obj = cls(env, **kwargs)
+        model_obj.ac.load_state_dict(torch.load(model_path))
         if buffer_path is not None:
-            model_.replay_buffer.load(buffer_path)
-        return model_
+            model_obj.replay_buffer.load(buffer_path)
+        return model_obj
 
     def learn(
-        self,
-        epochs: int,
-        steps_per_epoch: int,
-        start_steps: int,
-        policy_delay: int,
-        batch_size: int,
-        gamma: float,
-        seed: int,
-        betas: tuple[float, float],
-        lr: float,
-        test_env: gym.Env,
-        num_test_episodes: int,
-        save_freq: int,
-        wandb_run: Optional[wandb.sdk.wandb_run.Run],
+            self,
+            test_env: gym.Env,
+            epochs: int = 100,
+            num_test_episodes: int = 10,
+            steps_per_epoch: int = 5_000,
+            start_steps: int = 1_000,
+            policy_delay: int = 3,
+            batch_size: int = 256,
+            gamma: float = 0.99,
+            betas: tuple[float, float] = (0.5, 0.999),
+            lr: float = 1e-3,
+            save_freq: int = 10,
+            seed: Optional[int] = None,
+            wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ) -> None:
         self._logger = EpochLogger(wandb_run=wandb_run)
 
-        torch.manual_seed(seed)
-        np.random.seed(seed)
+        if seed is not None:
+            torch.manual_seed(seed)
+            np.random.seed(seed)
 
         self._q_optimizer = Adam(self.q_params, lr=lr, betas=betas)
         self._pi_optimizer = Adam(self.ac.pi.parameters(), lr=lr, betas=betas)
@@ -306,6 +309,8 @@ class CrossQ:
                     gamma,
                     update_policy,
                 )
+            elif self.replay_buffer.max_size < batch_size:
+                raise ValueError("Batch size must be less than replay buffer size")
 
             if (t + 1) % steps_per_epoch == 0:
                 epoch = (t + 1) // steps_per_epoch
@@ -333,27 +338,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser()
-
-    parser.add_argument("--actor_hidden_sizes", type=tuple, default=(256, 256))
-    parser.add_argument("--batch_norm_eps", type=float, default=1e-3)
-    parser.add_argument("--batch_norm_momentum", type=float, default=0.99)
-    parser.add_argument("--batch_size", type=int, default=256)
-    parser.add_argument("--betas", type=tuple, default=(0.5, 0.999))
-    parser.add_argument("--critic_hidden_sizes", type=tuple, default=(2048, 2048))
-    parser.add_argument("--device", type=str, default="auto")
     parser.add_argument("--env", type=str, default="Hockey-v0")
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--gamma", type=float, default=0.99)
-    parser.add_argument("--init_alpha", type=float, default=0.1)
-    parser.add_argument("--lr", type=float, default=1e-3)
-    parser.add_argument("--num_test_episodes", type=int, default=10)
-    parser.add_argument("--replay_size", type=int, default=int(1e6))
-    parser.add_argument("--save_freq", type=int, default=10)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--start_steps", type=int, default=1000)
-    parser.add_argument("--steps_per_epoch", type=int, default=10_000)
-    parser.add_argument("--policy_delay", type=int, default=3)
-
     args = parser.parse_args()
 
     if args.env == "Hockey-v0":
@@ -362,41 +347,15 @@ if __name__ == "__main__":
             entry_point="src.environment.environment:HockeyEnv",
         )
 
-    model = CrossQ(
-        env=gym.make(args.env),
-        ac_kwargs=dict(
-            batch_norm_eps=args.batch_norm_eps,
-            batch_norm_momentum=args.batch_norm_momentum,
-            init_alpha=args.init_alpha,
-            actor_hidden_sizes=args.actor_hidden_sizes,
-            critic_hidden_sizes=args.critic_hidden_sizes,
-        ),
-        replay_size=args.replay_size,
-        device=args.device,
-    )
-
-    run, error = wandb.init(project="cross_q", config=args.__dict__), None
+    model = CrossQ(env=gym.make(args.env))
+    run, error = wandb.init(project="cross_q"), None
     try:
         model.learn(
-            seed=args.seed,
             test_env=gym.make(args.env),
-            num_test_episodes=args.num_test_episodes,
-            steps_per_epoch=args.steps_per_epoch,
-            epochs=args.epochs,
-            gamma=args.gamma,
-            lr=args.lr,
-            betas=args.betas,
-            batch_size=args.batch_size,
-            start_steps=args.start_steps,
-            policy_delay=args.policy_delay,
-            save_freq=args.save_freq,
             wandb_run=run,
         )
     except (KeyboardInterrupt, Exception) as e:
         print(e)
         error = e
     finally:
-        path = Path(f"models/{run.id}")
-        model.save_model(path)
-        run.log_artifact(path, name="model")
         run.finish(exit_code=0 if error is None else 1)

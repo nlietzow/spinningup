@@ -20,11 +20,11 @@ class ReplayBuffer:
     """
 
     def __init__(
-        self,
-        obs_dim: tuple[int, ...],
-        act_dim: int,
-        max_size: int,
-        device: torch.device,
+            self,
+            obs_dim: tuple[int, ...],
+            act_dim: int,
+            max_size: int,
+            device: torch.device,
     ):
         # Initialize tensors directly on the specified device
         self.obs_buf, self.obs2_buf = (
@@ -55,12 +55,12 @@ class ReplayBuffer:
         return torch.as_tensor(array, dtype=torch.float32, device=self.device)
 
     def store(
-        self,
-        obs: np.ndarray,
-        act: np.ndarray,
-        rew: SupportsFloat,
-        obs2: np.ndarray,
-        done: bool,
+            self,
+            obs: np.ndarray,
+            act: np.ndarray,
+            rew: SupportsFloat,
+            obs2: np.ndarray,
+            done: bool,
     ):
         self.obs_buf[self.ptr] = self.to_tensor(obs)
         self.obs2_buf[self.ptr] = self.to_tensor(obs2)
@@ -87,7 +87,7 @@ class ReplayBuffer:
 
     @staticmethod
     def combined_shape(
-        length: int, shape: Optional[Union[tuple[int, ...], int]]
+            length: int, shape: Optional[Union[tuple[int, ...], int]]
     ) -> tuple[int, ...]:
         if shape is None:
             return (length,)
@@ -97,22 +97,20 @@ class ReplayBuffer:
         return length, *shape
 
     def save(self, path: Path) -> None:
-        torch.save(
-            TensorDict(
-                {
-                    "obs_buf": self.obs_buf.cpu(),
-                    "obs2_buf": self.obs2_buf.cpu(),
-                    "act_buf": self.act_buf.cpu(),
-                    "rew_buf": self.rew_buf.cpu(),
-                    "done_buf": self.done_buf.cpu(),
-                    "ptr": torch.tensor(self.ptr, device="cpu"),
-                    "size": torch.tensor(self.size, device="cpu"),
-                    "max_size": torch.tensor(self.max_size, device="cpu"),
-                },
-                batch_size=[self.max_size],
-            ),
-            path,
+        td = TensorDict(
+            {
+                "obs_buf": self.obs_buf.detach().cpu(),
+                "obs2_buf": self.obs2_buf.detach().cpu(),
+                "act_buf": self.act_buf.detach().cpu(),
+                "rew_buf": self.rew_buf.detach().cpu(),
+                "done_buf": self.done_buf.detach().cpu(),
+                "ptr": torch.tensor(self.ptr, device="cpu"),
+                "size": torch.tensor(self.size, device="cpu"),
+                "max_size": torch.tensor(self.max_size, device="cpu"),
+            },
+            batch_size=[self.max_size],
         )
+        torch.save(td, path)
 
     def load(self, path: Path) -> None:
         data = torch.load(path)

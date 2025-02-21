@@ -55,7 +55,7 @@ class SquashedGaussianMLPActor(nn.Module):
         self,
         obs_dim: int,
         act_dim: int,
-        hidden_sizes: tuple[int, int],
+        hidden_sizes: tuple[int, ...],
         activation: type[nn.Module],
         act_limit: float,
     ):
@@ -107,7 +107,7 @@ class MLPQFunctionBN(nn.Module):
         act_dim: int,
         batch_norm_eps: float,
         batch_norm_momentum: float,
-        hidden_sizes: tuple[int, int],
+        hidden_sizes: tuple[int, ...],
         activation: type[nn.Module],
     ):
         """
@@ -155,11 +155,11 @@ class CrossQActorCritic(nn.Module):
         self,
         observation_space: spaces.Box,
         action_space: spaces.Box,
-        init_alpha: float = 0.1,
-        batch_norm_eps: float = 1e-3,
-        batch_norm_momentum: float = 0.99,
-        actor_hidden_sizes: tuple[int, int] = (256, 256),
-        critic_hidden_sizes: tuple[int, int] = (2048, 2048),
+        init_alpha: float,
+        batch_norm_eps: float,
+        batch_norm_momentum: float,
+        actor_hidden_sizes: tuple[int, ...],
+        critic_hidden_sizes: tuple[int, ...],
         activation: type[nn.Module] = nn.ReLU,
     ):
         super().__init__()
