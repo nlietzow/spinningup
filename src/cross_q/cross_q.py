@@ -1,7 +1,6 @@
 import sys
 import time
 from pathlib import Path
-from typing import NamedTuple
 
 import gymnasium as gym
 import numpy as np
@@ -10,147 +9,118 @@ from torch.optim import Adam
 
 sys.path.append(str(Path(__file__).parents[2].resolve()))
 
-import src.cross_q.core as core
-from src.utils.logx import EpochLogger
+import src.cross_q.cross_q_policy as cross_q_policy  # noqa: E402
+from src.cross_q.cross_q_replay_buffer import Batch, ReplayBuffer  # noqa: E402
+from src.utils.logx import EpochLogger  # noqa: E402
 
 
-class Batch(NamedTuple):
-    obs: torch.Tensor
-    act: torch.Tensor
-    reward: torch.Tensor
-    obs2: torch.Tensor
-    done: torch.Tensor
-
-
-class ReplayBuffer:
-    """
-    A simple FIFO experience replay buffer for SAC agents with GPU storage.
-    """
-
-    def __init__(self, obs_dim, act_dim, size, device):
-        # Initialize tensors directly on the specified device
-        self.obs_buf = torch.zeros(
-            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
-        )
-        self.obs2_buf = torch.zeros(
-            core.combined_shape(size, obs_dim), dtype=torch.float32, device=device
-        )
-        self.act_buf = torch.zeros(
-            core.combined_shape(size, act_dim), dtype=torch.float32, device=device
-        )
-        self.rew_buf = torch.zeros(size, dtype=torch.float32, device=device)
-        self.done_buf = torch.zeros(size, dtype=torch.float32, device=device)
-
-        self.ptr, self.size, self.max_size = 0, 0, size
-        self.device = device
-
-    def to_tensor(self, array):
-        return torch.as_tensor(array, dtype=torch.float32, device=self.device)
-
-    def store(self, obs, act, rew, obs2, done):
-        self.obs_buf[self.ptr] = self.to_tensor(obs)
-        self.obs2_buf[self.ptr] = self.to_tensor(obs2)
-        self.act_buf[self.ptr] = self.to_tensor(act)
-        self.rew_buf[self.ptr] = self.to_tensor(rew)
-        self.done_buf[self.ptr] = self.to_tensor(done)
-        self.ptr = (self.ptr + 1) % self.max_size
-        self.size = min(self.size + 1, self.max_size)
-
-    def sample_batch(self, batch_size) -> Batch:
-        idxs = torch.randint(
-            0,
-            self.size,
-            (batch_size,),
-            device=self.device,
-        )
-        return Batch(
-            obs=self.obs_buf[idxs],
-            obs2=self.obs2_buf[idxs],
-            act=self.act_buf[idxs],
-            reward=self.rew_buf[idxs],
-            done=self.done_buf[idxs],
-        )
-
-
-def cross_q(
-    env_fn,
-    ac_kwargs,
-    seed,
-    steps_per_epoch,
-    epochs,
-    replay_size,
-    gamma,
-    lr,
-    alpha,
-    batch_size,
-    start_steps,
-    update_after,
-    update_every,
-    num_test_episodes,
-    logger_kwargs,
-    save_freq,
-    device,
-):
+class CrossQ:
     """
     Cross Q-learning with a BN-equipped critic that uses a joint forward pass.
     This removes the need for target networks by concatenating (s, a) and (s', a') batches,
     ensuring that the BatchNorm layers see a mixture of both distributions.
     """
-    local_vars = locals()
 
-    logger = EpochLogger(**logger_kwargs)
-    logger.save_config(local_vars)
+    def __init__(
+        self,
+        env: gym.Env,
+        ac_kwargs: dict,
+        replay_size: int,
+        alpha: float,
+        device: str = None,
+    ):
+        self.env = env
+        self.obs_dim = self.env.observation_space.shape
+        self.act_dim = self.env.action_space.shape[0]
 
-    torch.manual_seed(seed)
-    np.random.seed(seed)
+        if device is None or device == "auto":
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            self.device = torch.device(device)
 
-    env, test_env = env_fn(), env_fn()
-    obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape[0]
+        print(f"Device: {self.device}")
 
-    if device is None or device == "auto":
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    else:
-        device = torch.device(device)
+        # Setup adaptive alpha parameter
+        self.target_entropy = -float(self.act_dim)
+        self.log_alpha = torch.tensor(
+            np.log(alpha), requires_grad=True, device=self.device
+        )
 
-    logger.log("Device: %s" % device)
+        # Create actor-critic module
+        self.ac = cross_q_policy.MLPActorCritic(
+            env.observation_space, env.action_space, **ac_kwargs
+        ).to(self.device)
 
-    # Setup adaptive alpha parameter
-    target_entropy = -float(act_dim)  # commonly set to -|A|
-    log_alpha = torch.tensor(np.log(alpha), requires_grad=True, device=device)
-    alpha_optimizer = Adam([log_alpha], lr=lr, betas=(0.5, 0.999))
+        # List of parameters for both Q-networks
+        self.q_params = tuple(self.ac.q1.parameters()) + tuple(self.ac.q2.parameters())
 
-    # Create actor-critic module
-    ac = core.MLPActorCritic(env.observation_space, env.action_space, **ac_kwargs)
-    ac.to(device)
+        # Experience buffer
+        self.replay_buffer = ReplayBuffer(
+            obs_dim=self.obs_dim,
+            act_dim=self.act_dim,
+            size=replay_size,
+            device=self.device,
+        )
 
-    # List of parameters for both Q-networks
-    q_params = tuple(ac.q1.parameters()) + tuple(ac.q2.parameters())
+        # Init optimizers to None
+        self._q_optimizer = None
+        self._pi_optimizer = None
+        self._alpha_optimizer = None
 
-    # Experience buffer
-    replay_buffer = ReplayBuffer(
-        obs_dim=obs_dim, act_dim=act_dim, size=replay_size, device=device
-    )
+        # Logger
+        self._logger = None
 
-    # Count variables
-    var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.q1, ac.q2])
-    logger.log("\nNumber of parameters: \t pi: %d, \t q1: %d, \t q2: %d\n" % var_counts)
+        # Count variables
+        var_counts = tuple(
+            sum(p.numel() for p in module.parameters())
+            for module in [self.ac.pi, self.ac.q1, self.ac.q2]
+        )
+        print(
+            f"\nNumber of parameters: \t pi: {var_counts[0]}, \t q1: {var_counts[1]}, \t q2: {var_counts[2]}\n"
+        )
 
-    # Set up function for computing CrossQ Q-losses with joint forward pass
-    def compute_loss_q(batch: Batch):
+    @property
+    def q_optimizer(self) -> Adam:
+        if self._q_optimizer is None:
+            raise ValueError("Optimizer not initialized")
+        return self._q_optimizer
+
+    @property
+    def pi_optimizer(self) -> Adam:
+        if self._pi_optimizer is None:
+            raise ValueError("Optimizer not initialized")
+        return self._pi_optimizer
+
+    @property
+    def alpha_optimizer(self) -> Adam:
+        if self._alpha_optimizer is None:
+            raise ValueError("Optimizer not initialized")
+        return self._alpha_optimizer
+
+    @property
+    def logger(self) -> EpochLogger:
+        if self._logger is None:
+            raise ValueError("Logger not initialized")
+        return self._logger
+
+    def compute_loss_q(self, batch: Batch, gamma: float) -> torch.Tensor:
         with torch.no_grad():
             # Get next actions and corresponding log-probs
-            a2, logp_a2 = ac.pi(batch.obs2)
+            a2, logp_a2 = self.ac.pi(batch.obs2)
 
         # Use the joint forward pass so that BatchNorm sees both current and next samples
-        q1_current, q1_next = ac.q1.forward_joint(batch.obs, batch.act, batch.obs2, a2)
-        q2_current, q2_next = ac.q2.forward_joint(batch.obs, batch.act, batch.obs2, a2)
+        q1_current, q1_next = self.ac.q1.forward_joint(
+            batch.obs, batch.act, batch.obs2, a2
+        )
+        q2_current, q2_next = self.ac.q2.forward_joint(
+            batch.obs, batch.act, batch.obs2, a2
+        )
 
         # Compute the target backup without gradients using adaptive alpha
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = batch.reward + gamma * (1 - batch.done) * (
-                q_pi - log_alpha.exp() * logp_a2
+                q_pi - self.log_alpha.exp() * logp_a2
             )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()
@@ -159,57 +129,49 @@ def cross_q(
 
         return loss_q
 
-    # Set up function for computing CrossQ pi loss using adaptive alpha.
-    # Returns both the loss and the log-probabilities for alpha update.
-    def compute_loss_pi(batch: Batch):
-        pi, logp_pi = ac.pi(batch.obs)
-        q1_pi = ac.q1(batch.obs, pi)
-        q2_pi = ac.q2(batch.obs, pi)
+    def compute_loss_pi(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+        pi, logp_pi = self.ac.pi(batch.obs)
+        q1_pi = self.ac.q1(batch.obs, pi)
+        q2_pi = self.ac.q2(batch.obs, pi)
         q_pi = torch.min(q1_pi, q2_pi)
 
-        loss_pi = (log_alpha.exp() * logp_pi - q_pi).mean()
+        loss_pi = (self.log_alpha.exp() * logp_pi - q_pi).mean()
 
         return loss_pi, logp_pi
 
-    # Set up optimizers for policy and q-function
-    pi_optimizer = Adam(ac.pi.parameters(), lr=lr, betas=(0.5, 0.999))
-    q_optimizer = Adam(q_params, lr=lr, betas=(0.5, 0.999))
-
-    def update(batch: Batch):
+    def update(self, batch: Batch, gamma: float) -> None:
         # First update the Q-networks using the joint forward pass
-        q_optimizer.zero_grad()
-        loss_q = compute_loss_q(batch)
+        self.q_optimizer.zero_grad()
+        loss_q = self.compute_loss_q(batch, gamma)
         loss_q.backward()
-        q_optimizer.step()
-        logger.store(LossQ=loss_q.item())
+        self.q_optimizer.step()
+        self.logger.store(LossQ=loss_q.item())
 
         # Freeze Q-networks while updating the policy
-        for p in q_params:
+        for p in self.q_params:
             p.requires_grad = False
 
-        pi_optimizer.zero_grad()
-        loss_pi, logp_pi = compute_loss_pi(batch)
+        self.pi_optimizer.zero_grad()
+        loss_pi, logp_pi = self.compute_loss_pi(batch)
         loss_pi.backward()
-        pi_optimizer.step()
+        self.pi_optimizer.step()
 
-        for p in q_params:
+        for p in self.q_params:
             p.requires_grad = True
 
-        logger.store(LossPi=loss_pi.item())
+        self.logger.store(LossPi=loss_pi.item())
 
         # Adaptive alpha update
-        alpha_optimizer.zero_grad()
-        loss_alpha = -(log_alpha * (logp_pi.detach() + target_entropy)).mean()
+        self.alpha_optimizer.zero_grad()
+        loss_alpha = -(self.log_alpha * (logp_pi.detach() + self.target_entropy)).mean()
         loss_alpha.backward()
-        alpha_optimizer.step()
-        logger.store(Alpha=log_alpha.exp().item(), LossAlpha=loss_alpha.item())
+        self.alpha_optimizer.step()
 
-    def get_action(obs, deterministic=False):
-        obs = torch.as_tensor(obs, dtype=torch.float32, device=device)
-        action = ac.act(obs, deterministic)
-        return action
+        self.logger.store(
+            Alpha=self.log_alpha.exp().item(), LossAlpha=loss_alpha.item()
+        )
 
-    def test_agent():
+    def test_agent(self, test_env: gym.Env, num_test_episodes: int) -> None:
         returns, lengths, success = (
             np.zeros(num_test_episodes),
             np.zeros(num_test_episodes),
@@ -220,7 +182,7 @@ def cross_q(
             ep_ret, ep_len = 0, 0
             terminated, truncated = False, False
             while not (terminated or truncated):
-                action = get_action(obs, True)
+                action = self.ac.act(obs, deterministic=True)
                 obs, reward, terminated, truncated, info = test_env.step(action)
                 ep_ret += reward
                 ep_len += 1
@@ -229,71 +191,104 @@ def cross_q(
             lengths[ep] = ep_len
             success[ep] = info.get("is_success", False)
 
-        logger.store(
+        self.logger.store(
             TestEpRet=returns.mean(),
             TestEpLen=lengths.mean(),
             TestSuccess=success.mean(),
         )
 
-    # Main interaction loop
-    total_steps = steps_per_epoch * epochs
-    start_time = time.time()
-    obs, _ = env.reset()
-    ep_ret, ep_len = 0, 0
+    def learn(
+        self,
+        epochs: int,
+        steps_per_epoch: int,
+        start_steps: int,
+        update_after: int,
+        update_every: int,
+        batch_size: int,
+        gamma: float,
+        seed: int,
+        betas: tuple[float, float],
+        lr: float,
+        test_env: gym.Env,
+        num_test_episodes: int,
+        save_freq: int,
+        logger_kwargs: dict,
+    ) -> None:
+        local_vars = locals()
+        logger = EpochLogger(**logger_kwargs)
+        logger.setup_pytorch_saver(self.ac)
+        logger.save_config(local_vars)
 
-    logger.setup_pytorch_saver(ac)
+        torch.manual_seed(seed)
+        np.random.seed(seed)
 
-    for t in range(total_steps):
-        logger.set_step(t)
+        self._q_optimizer = Adam(self.q_params, lr=lr, betas=betas)
+        self._pi_optimizer = Adam(self.ac.pi.parameters(), lr=lr, betas=betas)
+        self._alpha_optimizer = Adam([self.log_alpha], lr=lr, betas=betas)
 
-        if t >= start_steps:
-            action = get_action(obs)
-        else:
-            action = env.action_space.sample()
+        # Main interaction loop
+        total_steps = steps_per_epoch * epochs
+        start_time = time.time()
+        obs, _ = self.env.reset()
+        ep_ret, ep_len = 0, 0
 
-        obs2, reward, terminated, truncated, info = env.step(action)
-        ep_ret += reward
-        ep_len += 1
+        for t in range(total_steps):
+            self.logger.set_step(t)
 
-        # Store if episode ended. However, if terminated only because of truncation,
-        # we don't store the done transition because it may continue.
-        replay_buffer.store(obs, action, reward, obs2, terminated and not truncated)
-        obs = obs2
+            if t >= start_steps:
+                action = self.ac.act(obs, deterministic=False)
+            else:
+                action = self.env.action_space.sample()
 
-        if terminated or truncated:
-            logger.store(
-                EpRet=ep_ret,
-                EpLen=ep_len,
-                EpSuccess=int(info.get("is_success", False)),
+            obs2, reward, terminated, truncated, info = self.env.step(action)
+            ep_ret += reward
+            ep_len += 1
+
+            # Store if episode ended. However, if terminated only because of truncation,
+            # we don't store the done transition because it may continue.
+            self.replay_buffer.store(
+                obs=obs,
+                act=action,
+                rew=reward,
+                obs2=obs2,
+                done=terminated and not truncated,
             )
-            obs, info = env.reset()
-            ep_ret, ep_len = 0, 0
+            obs = obs2
 
-        if t >= update_after and t % update_every == 0:
-            for _ in range(update_every):
-                batch = replay_buffer.sample_batch(batch_size)
-                update(batch)
+            if terminated or truncated:
+                self.logger.store(
+                    EpRet=ep_ret,
+                    EpLen=ep_len,
+                    EpSuccess=int(info.get("is_success", False)),
+                )
+                obs, info = self.env.reset()
+                ep_ret, ep_len = 0, 0
 
-        if (t + 1) % steps_per_epoch == 0:
-            epoch = (t + 1) // steps_per_epoch
+            if t >= update_after and t % update_every == 0:
+                for _ in range(update_every):
+                    batch = self.replay_buffer.sample_batch(batch_size)
+                    self.update(batch, gamma)
 
-            if (epoch % save_freq == 0) or (epoch == epochs):
-                logger.save_state({"env": env}, None)
+            if (t + 1) % steps_per_epoch == 0:
+                epoch = (t + 1) // steps_per_epoch
 
-            test_agent()
+                if (epoch % save_freq == 0) or (epoch == epochs):
+                    self.logger.save_state({"env": self.env}, None)
 
-            logger.log_tabular("Epoch", epoch)
-            logger.log_tabular("EpRet", with_min_and_max=True)
-            logger.log_tabular("TestEpRet", with_min_and_max=True)
-            logger.log_tabular("EpLen", average_only=True)
-            logger.log_tabular("TestEpLen", average_only=True)
-            logger.log_tabular("TotalEnvInteracts", t)
-            logger.log_tabular("LossPi", average_only=True)
-            logger.log_tabular("LossQ", average_only=True)
-            logger.log_tabular("FPS", t / (time.time() - start_time))
-            logger.log_tabular("Time", time.time() - start_time)
+                self.test_agent(test_env, num_test_episodes)
 
-            logger.dump_tabular()
+                self.logger.log_tabular("Epoch", epoch)
+                self.logger.log_tabular("EpRet", with_min_and_max=True)
+                self.logger.log_tabular("TestEpRet", with_min_and_max=True)
+                self.logger.log_tabular("EpLen", average_only=True)
+                self.logger.log_tabular("TestEpLen", average_only=True)
+                self.logger.log_tabular("TotalEnvInteracts", t)
+                self.logger.log_tabular("LossPi", average_only=True)
+                self.logger.log_tabular("LossQ", average_only=True)
+                self.logger.log_tabular("FPS", t / (time.time() - start_time))
+                self.logger.log_tabular("Time", time.time() - start_time)
+
+                self.logger.dump_tabular()
 
 
 if __name__ == "__main__":
@@ -302,7 +297,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("--env", type=str, default="Hockey-v0")
-    parser.add_argument("--ac_kwargs", type=dict, default=dict())
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--steps_per_epoch", type=int, default=10_000)
     parser.add_argument("--epochs", type=int, default=500)
@@ -317,7 +311,6 @@ if __name__ == "__main__":
     parser.add_argument("--num_test_episodes", type=int, default=10)
     parser.add_argument("--save_freq", type=int, default=10)
     parser.add_argument("--device", type=str, default="auto")
-    parser.add_argument("--logger_kwargs", type=dict, default=dict())
 
     args = parser.parse_args()
 
@@ -327,22 +320,26 @@ if __name__ == "__main__":
             entry_point="src.environment.environment:HockeyEnv",
         )
 
-    cross_q(
-        env_fn=lambda: gym.make(args.env),
-        ac_kwargs=args.ac_kwargs,
+    model = CrossQ(
+        env=gym.make(args.env),
+        ac_kwargs=dict(),
+        replay_size=args.replay_size,
+        alpha=args.alpha,
+        device=args.device,
+    )
+    model.learn(
         seed=args.seed,
+        test_env=gym.make(args.env),
+        num_test_episodes=args.num_test_episodes,
         steps_per_epoch=args.steps_per_epoch,
         epochs=args.epochs,
-        replay_size=args.replay_size,
         gamma=args.gamma,
         lr=args.lr,
-        alpha=args.alpha,
+        betas=(0.5, 0.999),
         batch_size=args.batch_size,
         start_steps=args.start_steps,
         update_after=args.update_after,
         update_every=args.update_every,
-        num_test_episodes=args.num_test_episodes,
-        logger_kwargs=args.logger_kwargs,
         save_freq=args.save_freq,
-        device=args.device,
+        logger_kwargs=dict(),
     )
