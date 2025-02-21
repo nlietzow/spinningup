@@ -171,7 +171,7 @@ class MLPActorCritic(nn.Module):
         )
 
     def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
-        obs = torch.as_tensor(obs, dtype=torch.float32, device=self.pi.device)
+        obs = torch.as_tensor(obs, dtype=torch.float32, device=self.pi.net.device)
         with torch.no_grad():
             a, _ = self.pi(obs, deterministic=deterministic, with_logprob=False)
             return a.cpu().numpy()
