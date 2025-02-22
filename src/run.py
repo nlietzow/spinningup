@@ -4,7 +4,7 @@ from typing import NamedTuple
 
 import wandb
 
-sys.path.append(str(Path(__file__).parent.resolve()))
+sys.path.append(str(Path(__file__).parents[1].resolve()))
 
 from src.algos.cross_q.cross_q import CrossQ  # noqa: E402
 from src.algos.sac.sac import SAC  # noqa: E402

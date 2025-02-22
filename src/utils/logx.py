@@ -111,8 +111,8 @@ class EpochLogger(Logger):
     A variant of Logger tailored for tracking average values over epochs.
     """
 
-    def __init__(self, wandb_run: Optional[wandb.sdk.wandb_run.Run] = None):
-        super().__init__(wandb_run)
+    def __init__(self, wandb_run: Optional[wandb.sdk.wandb_run.Run]):
+        super().__init__(wandb_run=wandb_run)
         self.epoch_dict: dict[str, list[float]] = dict()
 
     def store(self, **kwargs: float):
