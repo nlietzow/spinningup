@@ -41,3 +41,17 @@ def main(run_id):
     wandb.save(f"models/{run_id}/replay_buffer", base_path="models")
     env.close()
     eval_env.close()
+
+
+if __name__ == "__main__":
+    run = wandb.init(
+        project="rl-challenge-self-play",
+        sync_tensorboard=True,
+        settings=wandb.Settings(silent=True),
+    )
+    success = False
+    try:
+        main(run.id)
+        success = True
+    finally:
+        run.finish(exit_code=int(not success))
