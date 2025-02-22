@@ -54,6 +54,7 @@ class SelfPlayCallback(BaseCallback):
                 f"Number of policies: {len(self.opponents)}. "
                 f"Checkpoint freq: {self.checkpoint_freq}."
             )
+            print(self.training_env.env_method("opponent_id"))
 
         opponent = self.sample_opponent()
         indices = np.random.randint(
