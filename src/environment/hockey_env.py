@@ -17,8 +17,9 @@ class OpponentWrapper(ABC):
 class BasicOpponent(_BasicOpponent, OpponentWrapper):
     id: str = "basic"
 
-    def __init__(self, weak: bool = True):
+    def __init__(self, weak: bool = False):
         self.id += "_weak" if weak else "_strong"
+        print("Opponent ID:", self.id)
         super().__init__(weak=weak)
 
 
