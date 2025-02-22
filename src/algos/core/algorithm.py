@@ -7,16 +7,90 @@ from typing import Any, Iterator, Optional
 import gymnasium as gym
 import numpy as np
 import torch
-import wandb
+import torch.nn as nn
 from gymnasium import spaces
 from torch.optim import Adam
 
-from src.algos.core.policy import ActorCriticBase
+import wandb
+from src.algos.core.actor import SquashedGaussianMLPActor
+from src.algos.core.critic import CriticBase
 from src.algos.core.replay_buffer import Batch, ReplayBuffer
 from src.utils.logx import EpochLogger
 
 
-class Base(ABC):
+class ActorCriticBase(nn.Module, ABC):
+
+    actor_class = SquashedGaussianMLPActor
+
+    @property
+    @abstractmethod
+    def critic_class(self) -> type[CriticBase]:
+        pass
+
+    def __init__(
+        self,
+        observation_space: spaces.Box,
+        action_space: spaces.Box,
+        init_alpha: float,
+        alpha_trainable: bool,
+        actor_hidden_sizes: tuple[int, ...],
+        critic_hidden_sizes: tuple[int, ...],
+        batch_norm_eps: Optional[float],
+        batch_norm_momentum: Optional[float],
+    ):
+        super().__init__()
+        obs_dim = observation_space.shape[0]
+        act_dim = action_space.shape[0]
+        act_limit = action_space.high[0]
+
+        self.pi = self.actor_class(
+            obs_dim=obs_dim,
+            act_dim=act_dim,
+            hidden_sizes=actor_hidden_sizes,
+            act_limit=act_limit,
+        )
+
+        self.q1, self.q2 = (
+            self.critic_class(
+                obs_dim=obs_dim,
+                act_dim=act_dim,
+                hidden_sizes=critic_hidden_sizes,
+                batch_norm_eps=batch_norm_eps,
+                batch_norm_momentum=batch_norm_momentum,
+            ),
+            self.critic_class(
+                obs_dim=obs_dim,
+                act_dim=act_dim,
+                hidden_sizes=critic_hidden_sizes,
+                batch_norm_eps=batch_norm_eps,
+                batch_norm_momentum=batch_norm_momentum,
+            ),
+        )
+
+        self.log_alpha = nn.Parameter(
+            torch.tensor(np.log(init_alpha)),
+            requires_grad=alpha_trainable,
+        )
+
+    @property
+    def critic_hidden_sizes(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        return self.q1.hidden_sizes, self.q2.hidden_sizes
+
+    @property
+    def batch_norm_params(self) -> tuple[tuple[Optional[float], ...], ...]:
+        return (
+            (self.q1.batch_norm_eps, self.q1.batch_norm_momentum),
+            (self.q2.batch_norm_eps, self.q2.batch_norm_momentum),
+        )
+
+    def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
+        obs = torch.as_tensor(obs, dtype=torch.float32, device=self.pi.device)
+        with torch.no_grad():
+            a, _ = self.pi(obs, deterministic=deterministic, with_logprob=False)
+            return a.cpu().numpy()
+
+
+class AlgorithmBase(ABC):
     @property
     @abstractmethod
     def actor_critic_class(self) -> type[ActorCriticBase]:
@@ -186,7 +260,7 @@ class Base(ABC):
         model_path: Path,
         buffer_path: Optional[Path] = None,
         **kwargs,
-    ) -> "Base":
+    ) -> "AlgorithmBase":
         model_obj = cls(env, **kwargs)
         state_dict = torch.load(model_path)
         model_obj.ac.load_state_dict(state_dict)

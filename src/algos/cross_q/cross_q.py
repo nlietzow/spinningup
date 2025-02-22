@@ -1,12 +1,12 @@
 import gymnasium as gym
 import torch
 
-from src.algos.core.base import Base
+from src.algos.core.algorithm import AlgorithmBase
 from src.algos.core.replay_buffer import Batch
-from src.algos.cross_q.policy import CrossQActorCritic
+from src.algos.cross_q.core import CrossQActorCritic
 
 
-class CrossQ(Base):
+class CrossQ(AlgorithmBase):
     actor_critic_class = CrossQActorCritic
 
     def __init__(

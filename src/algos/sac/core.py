@@ -1,6 +1,8 @@
 from gymnasium import spaces
 
-from src.algos.core.policy import ActorCriticBase, CriticBase, mlp
+from src.algos.core.algorithm import ActorCriticBase
+from src.algos.core.critic import CriticBase
+from src.algos.core.utils import mlp
 
 
 class SACCritic(CriticBase):

@@ -4,12 +4,12 @@ from typing import Literal
 import gymnasium as gym
 import torch
 
-from src.algos.core.base import Base
+from src.algos.core.algorithm import AlgorithmBase
 from src.algos.core.replay_buffer import Batch
-from src.algos.sac.policy import SACActorCritic
+from src.algos.sac.core import SACActorCritic
 
 
-class SAC(Base):
+class SAC(AlgorithmBase):
     actor_critic_class = SACActorCritic
 
     def __init__(

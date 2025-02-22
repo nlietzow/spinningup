@@ -1,31 +1,9 @@
 import torch
-import torch.nn as nn
 from gymnasium import spaces
 
-from src.algos.core.policy import ActorCriticBase, CriticBase
-
-
-def mlp_bn(
-    sizes: tuple[int, ...],
-    batch_norm_eps: float,
-    batch_norm_momentum: float,
-    activation: type[nn.Module],
-    output_activation: type[nn.Module],
-):
-    def build():
-        for j in range(len(sizes) - 2):
-            yield nn.Linear(sizes[j], sizes[j + 1])
-            yield nn.BatchNorm1d(
-                sizes[j + 1],
-                eps=batch_norm_eps,
-                momentum=batch_norm_momentum,
-            )
-            yield activation()
-
-        yield nn.Linear(sizes[-2], sizes[-1])
-        yield output_activation()
-
-    return nn.Sequential(*build())
+from src.algos.core.algorithm import ActorCriticBase
+from src.algos.core.critic import CriticBase
+from src.algos.core.utils import mlp_bn
 
 
 class MLPQFunctionBN(CriticBase):
