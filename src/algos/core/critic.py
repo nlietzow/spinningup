@@ -12,12 +12,12 @@ class CriticBase(nn.Module, ABC):
         pass
 
     def __init__(
-            self,
-            obs_dim: int,
-            act_dim: int,
-            hidden_sizes: tuple[int, ...],
-            batch_norm_eps: Optional[float],
-            batch_norm_momentum: Optional[float],
+        self,
+        obs_dim: int,
+        act_dim: int,
+        hidden_sizes: tuple[int, ...],
+        batch_norm_eps: Optional[float],
+        batch_norm_momentum: Optional[float],
     ):
         super().__init__()
         kwargs = {}

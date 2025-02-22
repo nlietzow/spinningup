@@ -19,7 +19,6 @@ from src.utils.logx import EpochLogger
 
 
 class ActorCriticBase(nn.Module, ABC):
-
     actor_class = SquashedGaussianMLPActor
 
     @property
