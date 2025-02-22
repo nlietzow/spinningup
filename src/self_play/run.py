@@ -5,7 +5,7 @@ import wandb
 
 sys.path.append(str(Path(__file__).parents[2]))
 
-from src.self_play.pretraining import main as main_self_play  # noqa: E402
+from src.self_play.pretraining import pretraining  # noqa: E402
 
 if __name__ == "__main__":
     run = wandb.init(
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     )
     success = False
     try:
-        main_self_play(run.id)
+        pretraining(run.id)
         success = True
     finally:
         run.finish(exit_code=int(not success))

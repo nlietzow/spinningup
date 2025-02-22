@@ -1,13 +1,8 @@
-import sys
-from pathlib import Path
-
 from sbx import CrossQ
 from stable_baselines3.common.callbacks import EvalCallback
 from wandb.integration.sb3 import WandbCallback
 
-sys.path.append(str(Path(__file__).parents[2]))
-
-from src.environment import make_vec_hockey_env  # noqa: E402
+from src.environment import make_vec_hockey_env
 
 
 def make_callback(eval_env, run_id):
@@ -18,7 +13,7 @@ def make_callback(eval_env, run_id):
     return [wandb_callback, eval_callback]
 
 
-def main(run_id):
+def pretraining(run_id):
     env = make_vec_hockey_env(n_envs=4)
     eval_env = make_vec_hockey_env(n_envs=1)
 
