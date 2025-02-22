@@ -5,9 +5,9 @@ from stable_baselines3.common.callbacks import (
     EvalCallback,
     EveryNTimesteps,
 )
-from src.environment import make_vec_hockey_env
 from wandb.integration.sb3 import WandbCallback
 
+from src.environment import make_hockey_env, make_vec_hockey_env
 from src.self_play.update_player2_callback import SelfPlayCallback
 
 
@@ -34,13 +34,15 @@ def main(run_id):
     eval_env = None
     model = None
     try:
-        env = make_vec_hockey_env(n_envs=4)
-        eval_env = make_vec_hockey_env(n_envs=4)
+        env = make_vec_hockey_env(n_envs=8)
+        eval_env = make_hockey_env()
 
         callback = make_callback(eval_env, run_id)
         model = CrossQ(
             CrossQ.policy_aliases["MlpPolicy"],
             env,
+            train_freq=(1, "episode"),
+            gradient_steps=-1,
             verbose=0,
             stats_window_size=1,
             tensorboard_log=f"logs/{run_id}",
