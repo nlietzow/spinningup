@@ -20,11 +20,11 @@ class ReplayBuffer:
     """
 
     def __init__(
-            self,
-            obs_dim: tuple[int, ...],
-            act_dim: int,
-            max_size: int,
-            device: torch.device,
+        self,
+        obs_dim: tuple[int, ...],
+        act_dim: int,
+        max_size: int,
+        device: torch.device,
     ):
         # Initialize tensors directly on the specified device
         self.obs_buf, self.obs2_buf = (
@@ -32,8 +32,12 @@ class ReplayBuffer:
                 self.combined_shape(max_size, obs_dim),
                 dtype=torch.float32,
                 device=device,
-            )
-            for _ in range(2)
+            ),
+            torch.zeros(
+                self.combined_shape(max_size, obs_dim),
+                dtype=torch.float32,
+                device=device,
+            ),
         )
         self.act_buf = torch.zeros(
             self.combined_shape(max_size, act_dim),
@@ -55,12 +59,12 @@ class ReplayBuffer:
         return torch.as_tensor(array, dtype=torch.float32, device=self.device)
 
     def store(
-            self,
-            obs: np.ndarray,
-            act: np.ndarray,
-            rew: SupportsFloat,
-            obs2: np.ndarray,
-            done: bool,
+        self,
+        obs: np.ndarray,
+        act: np.ndarray,
+        rew: SupportsFloat,
+        obs2: np.ndarray,
+        done: bool,
     ):
         self.obs_buf[self.ptr] = self.to_tensor(obs)
         self.obs2_buf[self.ptr] = self.to_tensor(obs2)
@@ -70,7 +74,7 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
-    def sample_batch(self, batch_size) -> Batch:
+    def sample_batch(self, batch_size: int) -> Batch:
         indices = torch.randint(
             0,
             self.size,
@@ -87,7 +91,7 @@ class ReplayBuffer:
 
     @staticmethod
     def combined_shape(
-            length: int, shape: Optional[Union[tuple[int, ...], int]]
+        length: int, shape: Optional[Union[tuple[int, ...], int]]
     ) -> tuple[int, ...]:
         if shape is None:
             return (length,)

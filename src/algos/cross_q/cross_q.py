@@ -10,21 +10,21 @@ class CrossQ(Base):
     actor_critic_class = CrossQActorCritic
 
     def __init__(
-            self,
-            env: gym.Env,
-            replay_size: int = int(1e6),
-            init_alpha: float = 0.1,
-            alpha_trainable: bool = True,
-            actor_hidden_sizes: tuple[int, ...] = (256, 256),
-            critic_hidden_sizes: tuple[int, ...] = (2048, 2048),
-            batch_size: int = 256,
-            gamma: float = 0.99,
-            betas: tuple[float, float] = (0.5, 0.999),
-            lr: float = 1e-3,
-            policy_delay: int = 3,
-            batch_norm_eps: float = 1e-5,
-            batch_norm_momentum: float = 0.99,
-            device: str = "auto",
+        self,
+        env: gym.Env,
+        replay_size: int = int(1e6),
+        init_alpha: float = 0.1,
+        alpha_trainable: bool = True,
+        actor_hidden_sizes: tuple[int, ...] = (256, 256),
+        critic_hidden_sizes: tuple[int, ...] = (2048, 2048),
+        batch_size: int = 256,
+        gamma: float = 0.99,
+        betas: tuple[float, float] = (0.5, 0.999),
+        lr: float = 1e-3,
+        policy_delay: int = 3,
+        batch_norm_eps: float = 1e-5,
+        batch_norm_momentum: float = 0.99,
+        device: str = "auto",
     ):
         super().__init__(
             env=env,
@@ -60,7 +60,7 @@ class CrossQ(Base):
         with torch.no_grad():
             q_pi = torch.min(q1_next, q2_next)
             backup = batch.reward + self.gamma * (1 - batch.done) * (
-                    q_pi - self.ac.log_alpha.exp() * log_p_a2
+                q_pi - self.ac.log_alpha.exp() * log_p_a2
             )
 
         loss_q1 = ((q1_current - backup) ** 2).mean()

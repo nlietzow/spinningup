@@ -321,14 +321,14 @@ class Base(ABC):
                 ep_ret, ep_len = 0, 0
 
             if warmup_steps is None or t >= warmup_steps:
-                batch = self.replay_buffer.sample_batch(self.batch_size)
+                batch = self.replay_buffer.sample_batch(batch_size=self.batch_size)
                 update_policy = (t + 1) % self.policy_delay == 0
                 self.update(batch=batch, update_policy=update_policy)
 
             if save_freq and (t + 1) % save_freq == 0:
                 run_id = wandb_run.id if wandb_run is not None else "local"
                 model_path = Path(f"models/{run_id}/model_{t}.pth")
-                self.save_model(model_path=model_path)
+                self.save_model(model_path=model_path, save_buffer=False)
 
             if logging_steps and (t + 1) % logging_steps == 0:
                 if num_test_episodes and test_env is not None:

@@ -13,28 +13,23 @@ class SAC(Base):
     actor_critic_class = SACActorCritic
 
     def __init__(
-            self,
-            env: gym.Env,
-            replay_size: int = int(1e6),
-            polyak: float = 0.995,
-            init_alpha: float = 0.1,
-            alpha_trainable: bool = True,
-            actor_hidden_sizes: tuple[int, ...] = (256, 256),
-            critic_hidden_sizes: tuple[int, ...] = (256, 256),
-            batch_size: int = 256,
-            gamma: float = 0.99,
-            betas: tuple[float, float] = (0.9, 0.999),
-            lr: float = 3e-4,
-            policy_delay: Literal[1] = 1,  # for compatibility with CrossQ
-            batch_norm_eps: None = None,  # for compatibility with CrossQ
-            batch_norm_momentum: None = None,  # for compatibility with CrossQ
-            device: str = "auto",
+        self,
+        env: gym.Env,
+        replay_size: int = int(1e6),
+        polyak: float = 0.995,
+        init_alpha: float = 0.1,
+        alpha_trainable: bool = True,
+        actor_hidden_sizes: tuple[int, ...] = (256, 256),
+        critic_hidden_sizes: tuple[int, ...] = (256, 256),
+        batch_size: int = 256,
+        gamma: float = 0.99,
+        betas: tuple[float, float] = (0.9, 0.999),
+        lr: float = 3e-4,
+        policy_delay: Literal[1] = 1,  # for compatibility with CrossQ
+        batch_norm_eps: None = None,  # for compatibility with CrossQ
+        batch_norm_momentum: None = None,  # for compatibility with CrossQ
+        device: str = "auto",
     ):
-        if policy_delay != 1:
-            raise ValueError("SAC does not support policy_delay")
-        if batch_norm_eps is not None or batch_norm_momentum is not None:
-            raise ValueError("SAC does not support batch norm")
-
         super().__init__(
             env=env,
             replay_size=replay_size,
@@ -71,7 +66,7 @@ class SAC(Base):
             q2_target = self.ac_target.q2(batch.obs2, a2)
             q_target = torch.min(q1_target, q2_target)
             backup = batch.reward + self.gamma * (1 - batch.done) * (
-                    q_target - self.ac.log_alpha.exp() * log_p_a2
+                q_target - self.ac.log_alpha.exp() * log_p_a2
             )
 
         loss_q1 = ((q1 - backup) ** 2).mean()
@@ -80,7 +75,10 @@ class SAC(Base):
 
         return loss_q
 
-    def update(self, batch: Batch, **kwargs: Any) -> None:
+    def update(self, batch: Batch, update_policy: bool) -> None:
+        if not update_policy:
+            raise ValueError("SAC does not support policy delay")
+
         super().update(batch=batch, update_policy=True)
 
         with torch.no_grad():

@@ -6,11 +6,11 @@ from src.algos.core.policy import ActorCriticBase, CriticBase
 
 
 def mlp_bn(
-        sizes: tuple[int, ...],
-        batch_norm_eps: float,
-        batch_norm_momentum: float,
-        activation: type[nn.Module],
-        output_activation: type[nn.Module],
+    sizes: tuple[int, ...],
+    batch_norm_eps: float,
+    batch_norm_momentum: float,
+    activation: type[nn.Module],
+    output_activation: type[nn.Module],
 ):
     def build():
         for j in range(len(sizes) - 2):
@@ -32,12 +32,12 @@ class MLPQFunctionBN(CriticBase):
     critic_builder = staticmethod(mlp_bn)
 
     def __init__(
-            self,
-            obs_dim: int,
-            act_dim: int,
-            hidden_sizes: tuple[int, ...],
-            batch_norm_eps: float,
-            batch_norm_momentum: float,
+        self,
+        obs_dim: int,
+        act_dim: int,
+        hidden_sizes: tuple[int, ...],
+        batch_norm_eps: float,
+        batch_norm_momentum: float,
     ):
         super().__init__(
             obs_dim=obs_dim,
@@ -48,11 +48,11 @@ class MLPQFunctionBN(CriticBase):
         )
 
     def forward_joint(
-            self,
-            obs: torch.Tensor,
-            act: torch.Tensor,
-            next_obs: torch.Tensor,
-            next_act: torch.Tensor,
+        self,
+        obs: torch.Tensor,
+        act: torch.Tensor,
+        next_obs: torch.Tensor,
+        next_act: torch.Tensor,
     ):
         cat_obs = torch.cat((obs, next_obs), dim=0)
         cat_act = torch.cat((act, next_act), dim=0)
@@ -67,15 +67,15 @@ class CrossQActorCritic(ActorCriticBase):
     critic_class = MLPQFunctionBN
 
     def __init__(
-            self,
-            observation_space: spaces.Box,
-            action_space: spaces.Box,
-            init_alpha: float,
-            alpha_trainable: bool,
-            actor_hidden_sizes: tuple[int, ...],
-            critic_hidden_sizes: tuple[int, ...],
-            batch_norm_eps: float,
-            batch_norm_momentum: float,
+        self,
+        observation_space: spaces.Box,
+        action_space: spaces.Box,
+        init_alpha: float,
+        alpha_trainable: bool,
+        actor_hidden_sizes: tuple[int, ...],
+        critic_hidden_sizes: tuple[int, ...],
+        batch_norm_eps: float,
+        batch_norm_momentum: float,
     ):
         super().__init__(
             observation_space=observation_space,

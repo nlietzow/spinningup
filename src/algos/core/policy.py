@@ -13,9 +13,9 @@ LOG_STD_MIN = -20
 
 
 def mlp(
-        sizes: tuple[int, ...],
-        activation: type[nn.Module],
-        output_activation: type[nn.Module],
+    sizes: tuple[int, ...],
+    activation: type[nn.Module],
+    output_activation: type[nn.Module],
 ):
     def build():
         for j in range(len(sizes) - 2):
@@ -30,12 +30,12 @@ def mlp(
 
 class SquashedGaussianMLPActor(nn.Module):
     def __init__(
-            self,
-            obs_dim: int,
-            act_dim: int,
-            hidden_sizes: tuple[int, ...],
-            act_limit: float,
-            activation: type[nn.Module] = nn.ReLU,
+        self,
+        obs_dim: int,
+        act_dim: int,
+        hidden_sizes: tuple[int, ...],
+        act_limit: float,
+        activation: type[nn.Module] = nn.ReLU,
     ):
         super().__init__()
         self.net = mlp(
@@ -51,7 +51,9 @@ class SquashedGaussianMLPActor(nn.Module):
     def device(self) -> torch.device:
         return next(self.net.parameters()).device
 
-    def forward(self, obs: torch.Tensor, deterministic: bool = False, with_logprob: bool = True):
+    def forward(
+        self, obs: torch.Tensor, deterministic: bool = False, with_logprob: bool = True
+    ):
         net_out = self.net(obs)
         mu = self.mu_layer(net_out)
         log_std = self.log_std_layer(net_out)
@@ -66,7 +68,7 @@ class SquashedGaussianMLPActor(nn.Module):
 
         if with_logprob:
             log_p_pi = pi_distribution.log_prob(pi_action).sum(dim=-1) - (
-                    2 * (np.log(2) - pi_action - softplus(-2 * pi_action))
+                2 * (np.log(2) - pi_action - softplus(-2 * pi_action))
             ).sum(dim=1)
         else:
             log_p_pi = None
@@ -82,12 +84,12 @@ class CriticBase(nn.Module, ABC):
         pass
 
     def __init__(
-            self,
-            obs_dim: int,
-            act_dim: int,
-            hidden_sizes: tuple[int, ...],
-            batch_norm_eps: Optional[float],
-            batch_norm_momentum: Optional[float],
+        self,
+        obs_dim: int,
+        act_dim: int,
+        hidden_sizes: tuple[int, ...],
+        batch_norm_eps: Optional[float],
+        batch_norm_momentum: Optional[float],
     ):
         super().__init__()
         kwargs = {}
@@ -116,15 +118,15 @@ class ActorCriticBase(nn.Module, ABC):
         pass
 
     def __init__(
-            self,
-            observation_space: spaces.Box,
-            action_space: spaces.Box,
-            init_alpha: float,
-            alpha_trainable: bool,
-            actor_hidden_sizes: tuple[int, ...],
-            critic_hidden_sizes: tuple[int, ...],
-            batch_norm_eps: Optional[float],
-            batch_norm_momentum: Optional[float],
+        self,
+        observation_space: spaces.Box,
+        action_space: spaces.Box,
+        init_alpha: float,
+        alpha_trainable: bool,
+        actor_hidden_sizes: tuple[int, ...],
+        critic_hidden_sizes: tuple[int, ...],
+        batch_norm_eps: Optional[float],
+        batch_norm_momentum: Optional[float],
     ):
         super().__init__()
         obs_dim = observation_space.shape[0]
@@ -145,13 +147,14 @@ class ActorCriticBase(nn.Module, ABC):
                 hidden_sizes=critic_hidden_sizes,
                 batch_norm_eps=batch_norm_eps,
                 batch_norm_momentum=batch_norm_momentum,
-            ), self.critic_class(
+            ),
+            self.critic_class(
                 obs_dim=obs_dim,
                 act_dim=act_dim,
                 hidden_sizes=critic_hidden_sizes,
                 batch_norm_eps=batch_norm_eps,
                 batch_norm_momentum=batch_norm_momentum,
-            )
+            ),
         )
 
         self.log_alpha = nn.Parameter(
