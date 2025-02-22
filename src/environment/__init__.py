@@ -2,7 +2,7 @@ from typing import Optional
 
 import gymnasium as gym
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv, VecEnv
+from stable_baselines3.common.vec_env import VecEnv
 
 from src.environment.hockey_env import OpponentWrapper
 
@@ -22,5 +22,5 @@ def make_vec_hockey_env(
     return make_vec_env(
         lambda: make_hockey_env(opponent),
         n_envs=n_envs,
-        vec_env_cls=SubprocVecEnv,  # Use subprocess-based parallelization
+        # vec_env_cls=SubprocVecEnv,
     )

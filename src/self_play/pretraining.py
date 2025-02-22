@@ -1,17 +1,14 @@
-import multiprocessing as mp
 import sys
 from pathlib import Path
 
 import wandb
 from sbx import CrossQ
-from stable_baselines3.common.callbacks import (
-    EvalCallback,
-)
+from stable_baselines3.common.callbacks import EvalCallback
 from wandb.integration.sb3 import WandbCallback
 
 sys.path.append(str(Path(__file__).parents[2]))
 
-from src.environment import make_vec_hockey_env
+from src.environment import make_vec_hockey_env  # noqa: E402
 
 
 def make_callback(eval_env):
@@ -21,7 +18,7 @@ def make_callback(eval_env):
 
 
 def main(run_id):
-    env = make_vec_hockey_env(n_envs=4)
+    env = make_vec_hockey_env(n_envs=8)
     eval_env = make_vec_hockey_env(n_envs=1)
 
     print(f"Created env with {env.num_envs} processes.")
