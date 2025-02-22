@@ -1,3 +1,5 @@
+import multiprocessing as mp
+
 from sbx import CrossQ
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -6,13 +8,11 @@ from stable_baselines3.common.callbacks import (
 )
 from wandb.integration.sb3 import WandbCallback
 
-from src.environment import make_hockey_env, make_vec_hockey_env
-from src.self_play.update_player2_callback import SelfPlayCallback
+from src.environment import make_vec_hockey_env
 
 
 def make_callback(eval_env, run_id):
     wandb_callback = WandbCallback(model_save_path=f"models/{run_id}")
-    self_play_callback = SelfPlayCallback()
     eval_callback = EvalCallback(
         eval_env=eval_env, best_model_save_path=f"models/{run_id}"
     )
@@ -22,7 +22,6 @@ def make_callback(eval_env, run_id):
     )
     return [
         wandb_callback,
-        self_play_callback,
         eval_callback,
         every_n_timesteps_callback,
     ]
@@ -33,20 +32,19 @@ def main(run_id):
     eval_env = None
     model = None
     try:
-        env = make_vec_hockey_env(n_envs=8)
+        env = make_vec_hockey_env(n_envs=mp.cpu_count() - 1)
         eval_env = make_vec_hockey_env(n_envs=1)
+
+        print(f"Created env with {env.num_envs} processes.")
 
         callback = make_callback(eval_env, run_id)
         model = CrossQ(
             CrossQ.policy_aliases["MlpPolicy"],
             env,
-            train_freq=(128, "step"),
-            gradient_steps=-1,
             verbose=0,
-            stats_window_size=1,
             tensorboard_log=f"logs/{run_id}",
         )
-        model.learn(total_timesteps=20_000_000, callback=callback)
+        model.learn(total_timesteps=500_000, callback=callback)
 
     finally:
         if model is not None:

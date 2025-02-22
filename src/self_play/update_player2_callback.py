@@ -58,7 +58,9 @@ class SelfPlayCallback(BaseCallback):
 
         opponent = self.sample_opponent()
         indices = np.random.randint(
-            0, self.training_env.num_envs, size=min(self.training_env.num_envs, 2)
+            0,
+            self.training_env.num_envs,
+            size=1
         )
         self.training_env.env_method(
             "set_opponent",
