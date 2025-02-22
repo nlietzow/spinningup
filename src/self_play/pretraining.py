@@ -21,7 +21,7 @@ def make_callback(eval_env):
 
 
 def main(run_id):
-    env = make_vec_hockey_env(n_envs=max(1, mp.cpu_count() // 2))
+    env = make_vec_hockey_env(n_envs=4)
     eval_env = make_vec_hockey_env(n_envs=1)
 
     print(f"Created env with {env.num_envs} processes.")
