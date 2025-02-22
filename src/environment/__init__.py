@@ -1,5 +1,7 @@
 import gymnasium as gym
 
+from .environment import HockeyEnv
+
 
 def make_hockey_env(weak: bool = False) -> gym.Env:
     # check if the env is registered

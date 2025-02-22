@@ -17,13 +17,12 @@ class SquashedGaussianMLPActor(nn.Module):
         act_dim: int,
         hidden_sizes: tuple[int, ...],
         act_limit: float,
-        activation: type[nn.Module] = nn.ReLU,
     ):
         super().__init__()
         self.net = mlp(
             sizes=(obs_dim, *hidden_sizes),
-            activation=activation,
-            output_activation=activation,
+            activation=nn.ReLU,
+            output_activation=nn.ReLU,
         )
         self.mu_layer = nn.Linear(hidden_sizes[-1], act_dim)
         self.log_std_layer = nn.Linear(hidden_sizes[-1], act_dim)

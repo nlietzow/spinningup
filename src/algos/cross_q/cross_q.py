@@ -1,8 +1,7 @@
 import gymnasium as gym
 import torch
 
-from src.algos.core.algorithm import AlgorithmBase
-from src.algos.core.replay_buffer import Batch
+from src.algos.core import AlgorithmBase, Batch
 from src.algos.cross_q.core import CrossQActorCritic
 
 
@@ -68,13 +67,3 @@ class CrossQ(AlgorithmBase):
         loss_q = loss_q1 + loss_q2
 
         return loss_q
-
-    def compute_loss_pi(self, batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
-        pi, log_p_pi = self.ac.pi(batch.obs)
-        q1_pi = self.ac.q1(batch.obs, pi)
-        q2_pi = self.ac.q2(batch.obs, pi)
-        q_pi = torch.min(q1_pi, q2_pi)
-
-        loss_pi = (self.ac.log_alpha.exp() * log_p_pi - q_pi).mean()
-
-        return loss_pi, log_p_pi
