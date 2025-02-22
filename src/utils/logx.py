@@ -86,9 +86,9 @@ class Logger:
         )
         self.log_current_row[key] = val
 
-    def update_config(self, config: dict[str, Any]):
+    def update_config(self, **config: Any):
         if self.wandb:
-            self.wandb.config.update(config)
+            self.wandb.config.update(config, allow_val_change=False)
 
         self.log(
             json.dumps(config, indent=2, sort_keys=True),

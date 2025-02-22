@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Literal
+from typing import Literal
 
 import gymnasium as gym
 import torch

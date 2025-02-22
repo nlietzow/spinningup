@@ -48,6 +48,12 @@ class SquashedGaussianMLPActor(nn.Module):
         self.act_limit = act_limit
 
     @property
+    def hidden_sizes(self) -> tuple[int, ...]:
+        return tuple(
+            layer.out_features for layer in self.net if isinstance(layer, nn.Linear)
+        )
+
+    @property
     def device(self) -> torch.device:
         return next(self.net.parameters()).device
 
@@ -80,7 +86,7 @@ class SquashedGaussianMLPActor(nn.Module):
 class CriticBase(nn.Module, ABC):
     @property
     @abstractmethod
-    def critic_builder(self) -> Callable[..., nn.Module]:
+    def critic_builder(self) -> Callable[..., nn.Sequential]:
         pass
 
     def __init__(
@@ -104,6 +110,14 @@ class CriticBase(nn.Module, ABC):
             activation=nn.ReLU,
             output_activation=nn.Identity,
             **kwargs,
+        )
+        self.batch_norm_eps = batch_norm_eps
+        self.batch_norm_momentum = batch_norm_momentum
+
+    @property
+    def hidden_sizes(self) -> tuple[int, ...]:
+        return tuple(
+            layer.out_features for layer in self.q if isinstance(layer, nn.Linear)
         )
 
     def forward(self, obs: torch.Tensor, act: torch.Tensor):
@@ -160,6 +174,17 @@ class ActorCriticBase(nn.Module, ABC):
         self.log_alpha = nn.Parameter(
             torch.tensor(np.log(init_alpha)),
             requires_grad=alpha_trainable,
+        )
+
+    @property
+    def critic_hidden_sizes(self) -> tuple[tuple[int, ...], tuple[int, ...]]:
+        return self.q1.hidden_sizes, self.q2.hidden_sizes
+
+    @property
+    def batch_norm_params(self) -> tuple[tuple[Optional[float], ...], ...]:
+        return (
+            (self.q1.batch_norm_eps, self.q1.batch_norm_momentum),
+            (self.q2.batch_norm_eps, self.q2.batch_norm_momentum),
         )
 
     def act(self, obs: np.ndarray, deterministic: bool) -> np.ndarray:
