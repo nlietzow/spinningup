@@ -57,15 +57,11 @@ class SelfPlayCallback(BaseCallback):
             print(self.training_env.env_method("opponent_id"))
 
         opponent = self.sample_opponent()
-        indices = np.random.randint(
-            0,
-            self.training_env.num_envs,
-            size=1
-        )
+        index = random.randint(0, self.training_env.num_envs - 1)
         self.training_env.env_method(
             "set_opponent",
             opponent,
-            indices=indices,
+            indices=index,
         )
 
     def _on_step(self) -> bool:

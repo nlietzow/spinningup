@@ -5,7 +5,7 @@ import wandb
 
 sys.path.append(str(Path(__file__).parents[2]))
 
-from src.self_play.cross_q import main as main_self_play  # noqa: E402
+from src.self_play.pretraining import main as main_self_play  # noqa: E402
 
 if __name__ == "__main__":
     run = wandb.init(

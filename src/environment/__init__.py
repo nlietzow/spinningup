@@ -19,8 +19,4 @@ def make_hockey_env(opponent: Optional[OpponentWrapper] = None) -> gym.Env:
 def make_vec_hockey_env(
     n_envs: int, opponent: Optional[OpponentWrapper] = None
 ) -> VecEnv:
-    return make_vec_env(
-        lambda: make_hockey_env(opponent),
-        n_envs=n_envs,
-        # vec_env_cls=SubprocVecEnv,
-    )
+    return make_vec_env(lambda: make_hockey_env(opponent), n_envs=n_envs)
