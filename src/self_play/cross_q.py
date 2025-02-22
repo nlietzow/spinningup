@@ -1,4 +1,3 @@
-import wandb
 from sbx import CrossQ
 from stable_baselines3.common.callbacks import (
     CheckpointCallback,
@@ -56,17 +55,3 @@ def main(run_id):
             env.close()
         if eval_env is not None:
             eval_env.close()
-
-
-if __name__ == "__main__":
-    run = wandb.init(
-        project="rl-challenge-self-play",
-        sync_tensorboard=True,
-        settings=wandb.Settings(silent=True),
-    )
-    success = False
-    try:
-        main(run.id)
-        success = True
-    finally:
-        run.finish(exit_code=int(not success))
