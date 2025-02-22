@@ -294,14 +294,14 @@ class Base(ABC):
             if warmup_steps is None or t >= warmup_steps:
                 batch = self.replay_buffer.sample_batch(self.batch_size)
                 update_policy = (t + 1) % self.policy_delay == 0
-                self.update(batch, update_policy)
+                self.update(batch=batch, update_policy=update_policy)
 
             if save_freq and (t + 1) % save_freq == 0:
                 self.save_model(Path(f"models/cross_q_{t}"))
 
             if logging_steps and (t + 1) % logging_steps == 0:
                 if num_test_episodes and test_env is not None:
-                    self.test_agent(test_env, num_test_episodes)
+                    self.test_agent(test_env=test_env, num_test_episodes=num_test_episodes)
 
                 self.logger.log_tabular("EpRet", with_min_and_max=True)
                 self.logger.log_tabular("TestEpRet", with_min_and_max=True)
