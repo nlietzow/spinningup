@@ -2,6 +2,7 @@ import random
 from collections import deque
 from copy import deepcopy
 
+import numpy as np
 from stable_baselines3.common.callbacks import BaseCallback
 
 from src.environment.hockey_env import BasicOpponent, OpponentWrapper
@@ -55,10 +56,15 @@ class SelfPlayCallback(BaseCallback):
             )
 
         opponent = self.sample_opponent()
-        self.training_env.env_method("set_opponent", opponent=opponent)
-        assert self.training_env.env_method("opponent_id") == opponent.id, (
-            f"Expected opponent id {opponent.id}, "
-            f"got {self.training_env.env_method('opponent_id')}"
+        indices = np.random.randint(
+            0,
+            self.training_env.num_envs,
+            size=min(self.training_env.num_envs, 2)
+        )
+        self.training_env.env_method(
+            "set_opponent",
+            opponent,
+            indices=indices,
         )
 
     def _on_step(self) -> bool:
