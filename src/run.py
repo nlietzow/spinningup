@@ -24,9 +24,16 @@ if __name__ == "__main__":
     test_env = make_hockey_env()
 
     model = MODELS.SAC(env=env)
-    run = wandb.init(project="cross_q")
+    run = wandb.init(
+        project="cross_q",
+        settings=wandb.Settings(silent=True),
+    )
     model.learn(
         total_steps=int(1e6),
         test_env=make_hockey_env(),
         wandb_run=run,
     )
+    model.save_model(Path("models") / run.id / "final_model")
+    env.close()
+    test_env.close()
+    run.finish()
