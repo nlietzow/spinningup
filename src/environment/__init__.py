@@ -1,13 +1,25 @@
+from typing import Optional
+
 import gymnasium as gym
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import VecEnv
 
-from .environment import HockeyEnv  # noqa: F401
+from src.environment.hockey_env import OpponentWrapper
 
 
-def make_hockey_env(weak: bool = False) -> gym.Env:
-    # check if the env is registered
+def make_hockey_env(opponent: Optional[OpponentWrapper] = None) -> gym.Env:
     if "Hockey-v0" not in gym.envs.registry:
         gym.register(
             id="Hockey-v0",
-            entry_point="src.environment.environment:HockeyEnv",
+            entry_point="src.environment.hockey_env:HockeyEnv",
         )
-    return gym.make("Hockey-v0", weak=weak)
+    return gym.make("Hockey-v0", opponent=opponent)
+
+
+def make_vec_hockey_env(
+    n_envs: int, opponent: Optional[OpponentWrapper] = None
+) -> VecEnv:
+    return make_vec_env(
+        env_id=lambda: make_hockey_env(opponent),
+        n_envs=n_envs,
+    )

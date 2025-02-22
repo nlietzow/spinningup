@@ -5,3 +5,5 @@ numpy
 tqdm
 wandb
 box2d-py
+stable-baselines3[extra]
+sbx-rl

@@ -16,8 +16,7 @@ from gymnasium import spaces
 from gymnasium.error import DependencyNotInstalled
 from gymnasium.utils import EzPickle, seeding
 
-# import pyglet
-# from pyglet import gl
+DEFAULT_KEEP_MODE = True
 
 FPS = 50
 SCALE = 60.0  # affects how fast-paced the game is, forces should be adjusted as well (Don't touch)
@@ -117,14 +116,14 @@ class Mode(Enum):
     TRAIN_DEFENSE = 2
 
 
-class HockeyEnvCore(gym.Env, EzPickle):
+class HockeyEnv2Player(gym.Env, EzPickle):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": FPS}
 
     continuous = False
 
     def __init__(
         self,
-        keep_mode: bool = True,
+        keep_mode: bool = DEFAULT_KEEP_MODE,
         mode: int | str | Mode = Mode.NORMAL,
         verbose: bool = False,
     ):
@@ -984,7 +983,7 @@ class HockeyEnvCore(gym.Env, EzPickle):
 
 
 class BasicOpponent:
-    def __init__(self, weak, keep_mode):
+    def __init__(self, weak, keep_mode=DEFAULT_KEEP_MODE):
         self.weak = weak
         self.keep_mode = keep_mode
         self.phase = np.random.uniform(0, np.pi)
