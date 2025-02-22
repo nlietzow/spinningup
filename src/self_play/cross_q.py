@@ -34,13 +34,13 @@ def main(run_id):
     model = None
     try:
         env = make_vec_hockey_env(n_envs=8)
-        eval_env = make_hockey_env()
+        eval_env = make_vec_hockey_env(n_envs=1)
 
         callback = make_callback(eval_env, run_id)
         model = CrossQ(
             CrossQ.policy_aliases["MlpPolicy"],
             env,
-            train_freq=(1, "episode"),
+            train_freq=(256, "step"),
             gradient_steps=-1,
             verbose=0,
             stats_window_size=1,
