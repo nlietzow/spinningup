@@ -1,4 +1,5 @@
 from copy import deepcopy
+from typing import Any, Literal
 
 import gymnasium as gym
 import torch
@@ -24,8 +25,16 @@ class SAC(Base):
             gamma: float = 0.99,
             betas: tuple[float, float] = (0.9, 0.999),
             lr: float = 3e-4,
+            policy_delay: Literal[1] = 1,  # for compatibility with CrossQ
+            batch_norm_eps: None = None,  # for compatibility with CrossQ
+            batch_norm_momentum: None = None,  # for compatibility with CrossQ
             device: str = "auto",
     ):
+        if policy_delay != 1:
+            raise ValueError("SAC does not support policy_delay")
+        if batch_norm_eps is not None or batch_norm_momentum is not None:
+            raise ValueError("SAC does not support batch norm")
+
         super().__init__(
             env=env,
             replay_size=replay_size,
@@ -37,9 +46,9 @@ class SAC(Base):
             gamma=gamma,
             betas=betas,
             lr=lr,
-            policy_delay=1,
-            batch_norm_eps=None,
-            batch_norm_momentum=None,
+            policy_delay=policy_delay,
+            batch_norm_eps=batch_norm_eps,
+            batch_norm_momentum=batch_norm_momentum,
             device=device,
         )
         self.ac.cpu()
@@ -71,7 +80,7 @@ class SAC(Base):
 
         return loss_q
 
-    def update(self, batch: Batch, **kwargs):
+    def update(self, batch: Batch, **kwargs: Any) -> None:
         super().update(batch=batch, update_policy=True)
 
         with torch.no_grad():

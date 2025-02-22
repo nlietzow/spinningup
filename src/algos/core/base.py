@@ -241,11 +241,11 @@ class Base(ABC):
     def learn(
             self,
             total_steps: int,
-            warmup_steps: Optional[int] = 10_000,
+            warmup_steps: Optional[int] = 1_000,
             test_env: Optional[gym.Env] = None,
             num_test_episodes: Optional[int] = 10,
             logging_steps: Optional[int] = 10_000,
-            save_freq: Optional[int] = 10,
+            save_freq: Optional[int] = None,
             seed: Optional[int] = None,
             wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ) -> None:

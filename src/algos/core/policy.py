@@ -91,12 +91,14 @@ class CriticBase(nn.Module, ABC):
     ):
         super().__init__()
         kwargs = {}
-        if batch_norm_eps:
+        if batch_norm_eps is not None:
             kwargs["batch_norm_eps"] = batch_norm_eps
-        if batch_norm_momentum:
+        if batch_norm_momentum is not None:
             kwargs["batch_norm_momentum"] = batch_norm_momentum
+
+        sizes: tuple[int, ...] = (obs_dim + act_dim, *hidden_sizes, 1)
         self.q = self.critic_builder(
-            sizes=(obs_dim + act_dim, *hidden_sizes, 1),
+            sizes=sizes,
             activation=nn.ReLU,
             output_activation=nn.Identity,
             **kwargs,

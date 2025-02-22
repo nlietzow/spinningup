@@ -29,7 +29,7 @@ def mlp_bn(
 
 
 class MLPQFunctionBN(CriticBase):
-    critic_builder = mlp_bn
+    critic_builder = staticmethod(mlp_bn)
 
     def __init__(
             self,
