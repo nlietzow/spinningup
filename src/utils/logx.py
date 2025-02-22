@@ -1,3 +1,4 @@
+import json
 from typing import Any, Optional
 
 import numpy as np
@@ -84,6 +85,15 @@ class Logger:
             % key
         )
         self.log_current_row[key] = val
+
+    def update_config(self, config: dict[str, Any]):
+        if self.wandb:
+            self.wandb.config.update(config)
+
+        self.log(
+            json.dumps(config, indent=2, sort_keys=True),
+            color="magenta",
+        )
 
     def dump_tabular(self):
         """

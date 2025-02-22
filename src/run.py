@@ -19,23 +19,33 @@ class ModelMapping(NamedTuple):
 MODELS = ModelMapping(SAC=SAC, CROSS_Q=CrossQ)
 
 if __name__ == "__main__":
+    weak_opponent = True
 
-    for weak in (True, False):
-        for model_class in (MODELS.SAC, MODELS.CROSS_Q):
-            env = make_hockey_env()
-            test_env = make_hockey_env()
+    for alpha, alpha_trainable in (
+        (1 / 100000, False),
+        (1 / 1000, False),
+        (1 / 10, False),
+        (1 / 5, False),
+        (1 / 5, True),
+    ):
+        env = make_hockey_env(weak_opponent=weak_opponent)
+        test_env = make_hockey_env(weak_opponent=weak_opponent)
 
-            model = model_class(env=env)
-            run = wandb.init(
-                project="cross_q",
-                settings=wandb.Settings(silent=True),
-            )
-            model.learn(
-                total_steps=int(1e6),
-                test_env=make_hockey_env(),
-                wandb_run=run,
-            )
-            model.save_model(Path("models") / run.id / "final_model")
-            env.close()
-            test_env.close()
-            run.finish()
+        model = MODELS.SAC(
+            env=env,
+            alpha=alpha,
+            alpha_trainable=alpha_trainable,
+        )
+        run = wandb.init(
+            project="cross_q",
+            settings=wandb.Settings(silent=True),
+        )
+        model.learn(
+            total_steps=800_000,
+            test_env=test_env,
+            wandb_run=run,
+        )
+        model.save_model(Path("models") / run.id / "final_model")
+        env.close()
+        test_env.close()
+        run.finish()

@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 from itertools import chain
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 import gymnasium as gym
 import numpy as np
@@ -23,21 +23,21 @@ class Base(ABC):
         pass
 
     def __init__(
-            self,
-            env: gym.Env,
-            replay_size: int,
-            init_alpha: float,
-            alpha_trainable: bool,
-            actor_hidden_sizes: tuple[int, ...],
-            critic_hidden_sizes: tuple[int, ...],
-            device: str,
-            policy_delay: int,
-            batch_size: int,
-            gamma: float,
-            betas: tuple[float, float],
-            lr: float,
-            batch_norm_eps: Optional[float],
-            batch_norm_momentum: Optional[float],
+        self,
+        env: gym.Env,
+        replay_size: int,
+        init_alpha: float,
+        alpha_trainable: bool,
+        actor_hidden_sizes: tuple[int, ...],
+        critic_hidden_sizes: tuple[int, ...],
+        device: str,
+        policy_delay: int,
+        batch_size: int,
+        gamma: float,
+        betas: tuple[float, float],
+        lr: float,
+        batch_norm_eps: Optional[float],
+        batch_norm_momentum: Optional[float],
     ):
         if not isinstance(env.observation_space, spaces.Box):
             raise TypeError(
@@ -45,9 +45,7 @@ class Base(ABC):
             )
 
         if not isinstance(env.action_space, spaces.Box):
-            raise TypeError(
-                f"Expected Box action space, got {type(env.action_space)}"
-            )
+            raise TypeError(f"Expected Box action space, got {type(env.action_space)}")
 
         self.env = env
         self.obs_dim = self.env.observation_space.shape
@@ -94,6 +92,26 @@ class Base(ABC):
 
         # Init logger to None
         self._logger = None
+
+    @property
+    def config(self) -> dict[str, Any]:
+        return {
+            "env": self.env.unwrapped.spec.id,
+            "obs_dim": self.obs_dim,
+            "act_dim": self.act_dim,
+            "replay_size": self.replay_size,
+            "init_alpha": self.init_alpha,
+            "alpha_trainable": self.alpha_trainable,
+            "actor_hidden_sizes": self.actor_hidden_sizes,
+            "critic_hidden_sizes": self.critic_hidden_sizes,
+            "policy_delay": self.policy_delay,
+            "batch_size": self.batch_size,
+            "gamma": self.gamma,
+            "betas": self.betas,
+            "lr": self.lr,
+            "batch_norm_eps": self.batch_norm_eps,
+            "batch_norm_momentum": self.batch_norm_momentum,
+        }
 
     @property
     def q_params(self) -> Iterator[torch.nn.Parameter]:
@@ -163,11 +181,11 @@ class Base(ABC):
 
     @classmethod
     def load_model(
-            cls,
-            env: gym.Env,
-            model_path: Path,
-            buffer_path: Optional[Path] = None,
-            **kwargs,
+        cls,
+        env: gym.Env,
+        model_path: Path,
+        buffer_path: Optional[Path] = None,
+        **kwargs,
     ) -> "Base":
         model_obj = cls(env, **kwargs)
         state_dict = torch.load(model_path)
@@ -229,7 +247,7 @@ class Base(ABC):
         if self.ac.log_alpha.requires_grad:
             self.alpha_optimizer.zero_grad()
             loss_alpha = -(
-                    self.ac.log_alpha * (log_p_pi.detach() - float(self.act_dim))
+                self.ac.log_alpha * (log_p_pi.detach() - float(self.act_dim))
             ).mean()
             loss_alpha.backward()
             self.alpha_optimizer.step()
@@ -239,17 +257,27 @@ class Base(ABC):
             return loss_pi.item(), 0.0
 
     def learn(
-            self,
-            total_steps: int,
-            warmup_steps: Optional[int] = 1_000,
-            test_env: Optional[gym.Env] = None,
-            num_test_episodes: Optional[int] = 10,
-            logging_steps: Optional[int] = 10_000,
-            save_freq: Optional[int] = 100_000,
-            seed: Optional[int] = None,
-            wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
+        self,
+        total_steps: int,
+        warmup_steps: Optional[int] = 1_000,
+        test_env: Optional[gym.Env] = None,
+        num_test_episodes: Optional[int] = 10,
+        logging_steps: Optional[int] = 10_000,
+        save_freq: Optional[int] = 100_000,
+        seed: Optional[int] = None,
+        wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ) -> None:
         self._logger = EpochLogger(wandb_run=wandb_run)
+        self._logger.update_config(
+            **self.config,
+            total_steps=total_steps,
+            warmup_steps=warmup_steps,
+            test_env=test_env.unwrapped.spec.id if test_env is not None else None,
+            num_test_episodes=num_test_episodes,
+            logging_steps=logging_steps,
+            save_freq=save_freq,
+            seed=seed,
+        )
 
         if seed is not None:
             torch.manual_seed(seed)
@@ -297,11 +325,16 @@ class Base(ABC):
                 self.update(batch=batch, update_policy=update_policy)
 
             if save_freq and (t + 1) % save_freq == 0:
-                self.save_model(Path(f"models/cross_q_{t}"))
+                run_id = wandb_run.id if wandb_run is not None else "local"
+                model_path = Path(f"models/{run_id}/model_{t}.pth")
+                self.save_model(model_path=model_path)
 
             if logging_steps and (t + 1) % logging_steps == 0:
                 if num_test_episodes and test_env is not None:
-                    self.test_agent(test_env=test_env, num_test_episodes=num_test_episodes)
+                    self.test_agent(
+                        test_env=test_env,
+                        num_test_episodes=num_test_episodes,
+                    )
 
                 self.logger.log_tabular("EpRet", with_min_and_max=True)
                 self.logger.log_tabular("TestEpRet", with_min_and_max=True)
