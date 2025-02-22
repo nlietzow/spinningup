@@ -1,9 +1,9 @@
 import gymnasium as gym
 import torch
 
-from src.algos.common.replay_buffer import Batch
+from src.algos.core.base import Base
+from src.algos.core.replay_buffer import Batch
 from src.algos.cross_q.policy import CrossQActorCritic
-from src.algos.sac.sac_base import Base
 
 
 class CrossQ(Base):
@@ -13,15 +13,16 @@ class CrossQ(Base):
             self,
             env: gym.Env,
             replay_size: int = int(1e6),
-            init_alpha: float = 0.01,
+            init_alpha: float = 0.1,
             alpha_trainable: bool = True,
             actor_hidden_sizes: tuple[int, ...] = (256, 256),
             critic_hidden_sizes: tuple[int, ...] = (2048, 2048),
             batch_size: int = 256,
             gamma: float = 0.99,
-            betas: tuple[float, float] = (0.9, 0.999),
-            lr: float = 3e-4,
-            batch_norm_eps: float = 1e-3,
+            betas: tuple[float, float] = (0.5, 0.999),
+            lr: float = 1e-3,
+            policy_delay: int = 3,
+            batch_norm_eps: float = 1e-5,
             batch_norm_momentum: float = 0.99,
             device: str = "auto",
     ):
@@ -36,7 +37,7 @@ class CrossQ(Base):
             gamma=gamma,
             betas=betas,
             lr=lr,
-            policy_delay=1,
+            policy_delay=policy_delay,
             batch_norm_eps=batch_norm_eps,
             batch_norm_momentum=batch_norm_momentum,
             device=device,

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from gymnasium import spaces
 
-from src.algos.sac.policy_base import ActorCriticBase, CriticBase
+from src.algos.core.policy import ActorCriticBase, CriticBase
 
 
 def mlp_bn(

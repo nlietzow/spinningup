@@ -3,9 +3,9 @@ from copy import deepcopy
 import gymnasium as gym
 import torch
 
-from src.algos.common.replay_buffer import Batch
+from src.algos.core.base import Base
+from src.algos.core.replay_buffer import Batch
 from src.algos.sac.policy import SACActorCritic
-from src.algos.sac.sac_base import Base
 
 
 class SAC(Base):
@@ -16,7 +16,7 @@ class SAC(Base):
             env: gym.Env,
             replay_size: int = int(1e6),
             polyak: float = 0.995,
-            init_alpha: float = 0.01,
+            init_alpha: float = 0.1,
             alpha_trainable: bool = True,
             actor_hidden_sizes: tuple[int, ...] = (256, 256),
             critic_hidden_sizes: tuple[int, ...] = (256, 256),

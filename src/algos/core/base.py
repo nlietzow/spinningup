@@ -11,9 +11,9 @@ import wandb
 from gymnasium import spaces
 from torch.optim import Adam
 
-from src.algos.common.replay_buffer import Batch, ReplayBuffer  # noqa: E402
-from src.algos.sac.policy_base import ActorCriticBase
-from src.utils.logx import EpochLogger  # noqa: E402
+from src.algos.core.policy import ActorCriticBase
+from src.algos.core.replay_buffer import Batch, ReplayBuffer
+from src.utils.logx import EpochLogger
 
 
 class Base(ABC):

@@ -20,11 +20,11 @@ class ReplayBuffer:
     """
 
     def __init__(
-        self,
-        obs_dim: tuple[int, ...],
-        act_dim: int,
-        max_size: int,
-        device: torch.device,
+            self,
+            obs_dim: tuple[int, ...],
+            act_dim: int,
+            max_size: int,
+            device: torch.device,
     ):
         # Initialize tensors directly on the specified device
         self.obs_buf, self.obs2_buf = (
@@ -55,12 +55,12 @@ class ReplayBuffer:
         return torch.as_tensor(array, dtype=torch.float32, device=self.device)
 
     def store(
-        self,
-        obs: np.ndarray,
-        act: np.ndarray,
-        rew: SupportsFloat,
-        obs2: np.ndarray,
-        done: bool,
+            self,
+            obs: np.ndarray,
+            act: np.ndarray,
+            rew: SupportsFloat,
+            obs2: np.ndarray,
+            done: bool,
     ):
         self.obs_buf[self.ptr] = self.to_tensor(obs)
         self.obs2_buf[self.ptr] = self.to_tensor(obs2)
@@ -87,7 +87,7 @@ class ReplayBuffer:
 
     @staticmethod
     def combined_shape(
-        length: int, shape: Optional[Union[tuple[int, ...], int]]
+            length: int, shape: Optional[Union[tuple[int, ...], int]]
     ) -> tuple[int, ...]:
         if shape is None:
             return (length,)

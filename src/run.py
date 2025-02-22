@@ -1,16 +1,33 @@
 import sys
 from pathlib import Path
+from typing import NamedTuple
 
 import wandb
 
 sys.path.append(str(Path(__file__).parent.resolve()))
 
+from src.algos.core.base import Base  # noqa: E402
 from src.algos.cross_q.cross_q import CrossQ  # noqa: E402
+from src.algos.sac.sac import SAC  # noqa: E402
+
+
+class ModelMapping(NamedTuple):
+    CROSS_Q: type[Base]
+    SAC: type[Base]
+
+
+MODELS = ModelMapping(
+    CROSS_Q=CrossQ,
+    SAC=SAC,
+)
 
 if __name__ == "__main__":
     from src.environment import make_hockey_env
 
-    model = CrossQ(env=make_hockey_env())
+    env = make_hockey_env()
+    test_env = make_hockey_env()
+
+    model = MODELS.SAC(env=env)
     run, error = wandb.init(project="cross_q"), None
     try:
         model.learn(

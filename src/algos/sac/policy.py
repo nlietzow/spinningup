@@ -1,6 +1,6 @@
 from gymnasium import spaces
 
-from src.algos.sac.policy_base import ActorCriticBase, CriticBase, mlp
+from src.algos.core.policy import ActorCriticBase, CriticBase, mlp
 
 
 class SACCritic(CriticBase):
