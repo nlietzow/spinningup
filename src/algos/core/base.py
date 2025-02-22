@@ -96,6 +96,7 @@ class Base(ABC):
     @property
     def config(self) -> dict[str, Any]:
         return {
+            "name": self.__class__.__name__,
             "env": self.env.unwrapped.spec.id,
             "obs_dim": self.obs_dim,
             "act_dim": self.act_dim,
