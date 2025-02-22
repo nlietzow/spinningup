@@ -3,7 +3,7 @@ from pathlib import Path
 
 import wandb
 
-sys.path.append(str(Path(__file__).parents[1]))
+sys.path.append(str(Path(__file__).parents[2]))
 
 from src.self_play.cross_q import main as main_self_play  # noqa: E402
 
