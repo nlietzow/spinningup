@@ -9,8 +9,8 @@ from src.environment.hockey_env import BasicOpponent, OpponentWrapper
 from src.self_play.policy_opponent import PolicyOpponent
 
 NUM_POLICIES = 10
-WEAK_OPPONENT_PROP = 0.1
-OPPONENT_SAMPLE_PROP = 0.5
+WEAK_OPPONENT_PROP = 0.05
+STRONG_OPPONENT_PROP = 0.5
 WEAK_OPPONENT = BasicOpponent(weak=True)
 STRONG_OPPONENT = BasicOpponent(weak=False)
 
@@ -34,11 +34,11 @@ class SelfPlayCallback(BaseCallback):
         return 1_000_000_000  # Never checkpoint
 
     def sample_opponent(self) -> OpponentWrapper:
-        if len(self.opponents) < self.opponents.maxlen // 2:
-            return STRONG_OPPONENT
-        elif random.random() < WEAK_OPPONENT_PROP:
+        if random.random() < WEAK_OPPONENT_PROP:
             return WEAK_OPPONENT
-        elif random.random() < OPPONENT_SAMPLE_PROP:
+        elif random.random() < STRONG_OPPONENT_PROP:
+            return STRONG_OPPONENT
+        elif len(self.opponents) < self.opponents.maxlen // 2:
             return STRONG_OPPONENT
         return random.choice(self.opponents)
 
