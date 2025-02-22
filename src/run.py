@@ -35,7 +35,7 @@ if __name__ == "__main__":
         test_env = make_hockey_env(weak=True)
         model = model_cls(
             env=env,
-            alpha=alpha,
+            init_alpha=alpha,
             alpha_trainable=alpha_trainable,
         )
         model.learn(
