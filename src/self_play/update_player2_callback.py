@@ -46,7 +46,7 @@ class SelfPlayCallback(BaseCallback):
         if (self.num_timesteps - self.last_checkpoint_time) >= self.checkpoint_freq:
             policy = deepcopy(self.model.policy)
             policy.to(self.model.device)
-            policy_opponent = PolicyOpponent(policy=policy)
+            policy_opponent = PolicyOpponent(policy=policy, timestep=self.num_timesteps)
             self.opponents.append(policy_opponent)
             self.last_checkpoint_time = self.num_timesteps
             print(
@@ -58,9 +58,7 @@ class SelfPlayCallback(BaseCallback):
 
         opponent = self.sample_opponent()
         indices = np.random.randint(
-            0,
-            self.training_env.num_envs,
-            size=min(self.training_env.num_envs, 2)
+            0, self.training_env.num_envs, size=min(self.training_env.num_envs, 2)
         )
         self.training_env.env_method(
             "set_opponent",
