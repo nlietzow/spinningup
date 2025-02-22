@@ -5,7 +5,7 @@ from src.environment.core import BasicOpponent, HockeyEnvCore
 
 
 class HockeyEnv(HockeyEnvCore):
-    def __init__(self, weak: bool = False):
+    def __init__(self, weak: bool):
         super().__init__()
         self.opponent = BasicOpponent(weak=weak, keep_mode=self.keep_mode)
         self.action_space = spaces.Box(-1, +1, (4,), dtype=np.float32)

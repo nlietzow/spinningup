@@ -245,7 +245,7 @@ class Base(ABC):
             test_env: Optional[gym.Env] = None,
             num_test_episodes: Optional[int] = 10,
             logging_steps: Optional[int] = 10_000,
-            save_freq: Optional[int] = None,
+            save_freq: Optional[int] = 100_000,
             seed: Optional[int] = None,
             wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ) -> None:
