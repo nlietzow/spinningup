@@ -14,7 +14,6 @@ from torch.optim import Adam
 from src.algos.core import SquashedGaussianMLPActor
 from src.utils.logx import EpochLogger
 from .cross_q import CrossQ
-from ...environment import HockeyEnv
 
 
 class CrossQSelfPlay(CrossQ):
@@ -57,7 +56,7 @@ class CrossQSelfPlay(CrossQ):
         seed: Optional[int] = None,
         wandb_run: Optional[wandb.sdk.wandb_run.Run] = None,
     ) -> None:
-        if not isinstance(self.env, HockeyEnv):
+        if not hasattr(self.env.unwrapped, "set"):
             raise ValueError("Environment must be HockeyEnv")
 
         self._logger = EpochLogger(wandb_run=wandb_run)
@@ -113,10 +112,10 @@ class CrossQSelfPlay(CrossQ):
                 ep_ret, ep_len = 0, 0
 
                 if actor := self.sample_from_pool():
-                    self.env.set(use_opponent=False, weak=None, actor=actor)
+                    self.env.unwrapped.set(use_opponent=False, weak=None, actor=actor)
                 else:
                     weak = np.random.rand() < self.weak_opponent_prob
-                    self.env.set(use_opponent=True, weak=weak, actor=None)
+                    self.env.unwrapped.set(use_opponent=True, weak=weak, actor=None)
 
             if (t + 1) % self.policy_checkpoint_freq == 0:
                 self.add_to_pool(actor=self.ac.pi)

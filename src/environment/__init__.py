@@ -1,6 +1,6 @@
 import gymnasium as gym
 
-from .environment import HockeyEnv
+from .environment import HockeyEnv  # noqa: F401
 
 
 def make_hockey_env(weak: bool = False) -> gym.Env:

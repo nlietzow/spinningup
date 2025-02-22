@@ -133,7 +133,7 @@ class EpochLogger(Logger):
             self.wandb.log(kwargs, step=self.step)
 
         for k, v in kwargs.items():
-            if not (k in self.epoch_dict.keys()):
+            if k not in self.epoch_dict.keys():
                 self.epoch_dict[k] = []
             self.epoch_dict[k].append(v)
 

@@ -9,10 +9,8 @@ import numpy as np
 from Box2D.b2 import (
     circleShape,
     contactListener,
-    edgeShape,
     fixtureDef,
     polygonShape,
-    revoluteJointDef,
 )
 from gymnasium import spaces
 from gymnasium.error import DependencyNotInstalled
